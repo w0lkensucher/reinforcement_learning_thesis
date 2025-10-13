@@ -29,7 +29,7 @@ def get_train_cfg(exp_name, max_iterations):
             "class_name": "PPO",
             "clip_param": 0.15,
             "desired_kl": 0.01,
-            "entropy_coef": 0.01,
+            "entropy_coef": 0.03,
             "gamma": 0.99,
             "lam": 0.95,
             "learning_rate": 0.0003,
@@ -294,7 +294,7 @@ def main():
             env.force_randomize_obstacles()
             episode_counter = 0
 
-        # Get current training performance
+        # Get current training performance; evaluation is failing, idk why
         try:
             # Method 1: Try to get from runner's internal storage
             if hasattr(runner, 'tot_episodes') and runner.tot_episodes > 0:

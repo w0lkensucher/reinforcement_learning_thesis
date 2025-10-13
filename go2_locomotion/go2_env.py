@@ -245,7 +245,7 @@ class Go2Env:
         #if self.env_cfg.get('randomize_obstacles_per_episode', False):
         #    self._randomize_obstacles_positions()
         
-        self._resample_commands(envs_idx)
+        # self._resample_commands(envs_idx)
 
     def force_randomize_obstacles(self):
         self._randomize_obstacles_positions()
