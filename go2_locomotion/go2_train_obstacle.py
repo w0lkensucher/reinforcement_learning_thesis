@@ -175,11 +175,15 @@ def get_cfgs():
         "lin_vel_x_range": [0.3, 0.8],  # Variable forward speed for obstacle navigation
         "lin_vel_y_range": [-0.2, 0.2], # Allow lateral movement for obstacle avoidance
         "ang_vel_range": [-0.3, 0.3],   # Allow turning for obstacle navigation
-    }
+    } # separate updates based on training needs
     env_cfg.update({
         'randomize_obstacles_per_evaluation': True,  # Randomize obstacles each episode during evaluation
-        'randomize_every_n_episodes': 1000,      # Randomize every 1000 episodes
+        'randomize_every_n_episodes': 2000,      # Randomize every 2000 episodes
+        'interval_reset': 150,
         'seed_variation': True,
+        'randomize_strategy': 'delayed',  # Delayed randomization strategy
+        'performance_threshold': 2.0,     # Performance threshold for performance-based randomization
+        'min_random_gap': 100,             # Minimum gap between randomizations
     })
 
     return env_cfg, obs_cfg, reward_cfg, command_cfg
@@ -240,6 +244,31 @@ def evaluate_during_training(runner, env_cfg, obs_cfg, reward_cfg, command_cfg, 
         'episodes': len(episode_rewards)
     }
 
+def delayed_randomization(env, episode_counter, randomize_interval):
+    """Randomize obstacles if the episode counter exceeds the interval"""
+    if episode_counter >= randomize_interval:
+        env.force_randomize_obstacles()
+        episode_counter = 0
+    return episode_counter
+
+def performance_randomization(env, iterations_done, performance_metric, threshold, last_randomization):
+    """Randomize obstacles based on performance metric"""
+    if performance_metric > threshold:
+        env.force_randomize_obstacles()
+        last_randomization = iterations_done
+    return last_randomization
+
+# not correctly implemented yet TODO
+def get_randomization_schedule(iteration):
+    """Get randomization interval based on training progress"""
+    if iteration < 100:
+        return float('inf')  # No randomization early
+    elif iteration < 200:
+        return 5000  # Very infrequent
+    elif iteration < 350:
+        return 2000  # Moderate
+    else:
+        return 1000  # More frequent for final training
 
 def main():
     parser = argparse.ArgumentParser()
@@ -280,14 +309,42 @@ def main():
         writer.writeheader()
     
     iterations_done = 0
-    episode_counter = 0
-    randomize_interval = env_cfg.get('randomize_every_n_episodes', 500)
+
+    randomize_interval = env_cfg.get('randomize_every_n_episodes', 1500)
+    if randomize_strategy == 'delayed':
+        episode_counter = 0
+        reset_iteration = env_cfg.get('interval_reset', 150)
+    elif randomize_strategy == 'performance':
+        last_randomization = 0
+        min_random_gap = env_cfg.get('min_random_gap', 100)
+        performance_threshold = env_cfg.get('performance_threshold', 2.0)
+    elif randomize_strategy == 'curriculum': # Placeholder for curriculum-based strategy TODO
+        pass 
+
+    # change this depending on config
+    randomize_strategy = env_cfg.get('randomize_strategy', 'delayed')
 
     while iterations_done < args.max_iterations:
         current_batch = min(args.eval_interval, args.max_iterations - iterations_done)
         runner.learn(num_learning_iterations=current_batch, init_at_random_ep_len=True)
         iterations_done += current_batch
-        
+
+        if randomize_strategy == 'delayed':
+            if iterations_done > reset_iteration:
+                episode_counter += args.num_envs * current_batch
+                episode_counter = delayed_randomization(env, episode_counter, randomize_interval)
+        elif randomize_strategy == 'performance':
+            if (iterations_done - last_randomization) >= min_random_gap:
+                try:
+                    recent_reward = env.episode_sum['reward'].mean().item()
+                    last_randomization = performance_randomization(env, iterations_done, recent_reward, performance_threshold, last_randomization)
+                except:
+                    pass
+        elif randomize_strategy == 'curriculum':
+            reset_iteration = 0 # Placeholder for curriculum-based strategy TODO
+
+
+        """
         episode_counter += args.num_envs * current_batch
 
         if episode_counter >= randomize_interval:
@@ -330,7 +387,7 @@ def main():
                 'eval_std_reward': eval_stats['std_reward'],
                 'overfitting_gap': overfitting_gap
             })
-            
+            """
     # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
 
