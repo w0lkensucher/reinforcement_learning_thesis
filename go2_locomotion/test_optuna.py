@@ -6,6 +6,7 @@ import genesis as gs
 from go2_env import Go2Env
 from rsl_rl.runners import OnPolicyRunner
 import numpy as np
+from go2_train_obstacle import get_cfgs
 
 def objective(trial):
     """Optuna objective function for hyperparameter optimization"""
