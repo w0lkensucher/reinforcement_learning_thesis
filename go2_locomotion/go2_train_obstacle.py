@@ -176,17 +176,28 @@ def get_cfgs():
         "lin_vel_y_range": [-0.2, 0.2], # Allow lateral movement for obstacle avoidance
         "ang_vel_range": [-0.3, 0.3],   # Allow turning for obstacle navigation
     } # separate updates based on training needs
-    env_cfg.update({
-        'randomize_obstacles_per_evaluation': True,  # Randomize obstacles each episode during evaluation
-        'randomize_every_n_episodes': 2000,      # Randomize every 2000 episodes
-        'interval_reset': 150,
-        'seed_variation': True,
-        'randomize_strategy': 'delayed',  # Delayed randomization strategy
-        'performance_threshold': 2.0,     # Performance threshold for performance-based randomization
-        'min_random_gap': 100,             # Minimum gap between randomizations
-    })
+    env_cfg.update(get_randomization_cfg(strategy='delayed'))
 
     return env_cfg, obs_cfg, reward_cfg, command_cfg
+
+def get_randomization_cfg(strategy=None):
+    if strategy == 'delayed':
+        return {
+            'randomize_every_n_episodes': 2000,      # Randomize every 2000 episodes
+            'interval_reset': 150,
+            'seed_variation': True,
+        }
+    elif strategy == 'performance':
+        return {
+            'performance_threshold': 2.0,     # Performance threshold for performance-based randomization
+            'min_random_gap': 100,             # Minimum gap between randomizations
+        }
+    elif strategy == 'curriculum':
+        return {
+            # Placeholder for curriculum-based parameters
+        }
+    else:
+        return {}
 
 def evaluate_during_training(runner, env_cfg, obs_cfg, reward_cfg, command_cfg, eval_episodes=5):
     """Quick evaluation during training"""
