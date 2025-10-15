@@ -5,14 +5,9 @@ import shutil
 import genesis as gs
 from go2_env import Go2Env
 from rsl_rl.runners import OnPolicyRunner
-import numpy as np
+import torch
 from go2_train_obstacle import get_cfgs
 import traceback
-
-os.environ['TORCH_LOGS'] = '+dynamo'
-os.environ['TORCHDYNAMO_DISABLE'] = '1'
-os.environ['TORCH_COMPILE_DISABLE'] = '1'
-os.environ['PYTORCH_DISABLE_DYNAMO'] = '1'
 
 def objective(trial):
     """Optuna objective function for hyperparameter optimization"""
@@ -62,7 +57,7 @@ def objective(trial):
         runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
         
         # Get final reward as optimization target
-        final_reward = runner.mean_reward
+        final_reward = torch.mean(env.episode_sums['reward']).item() 
         
         # Clean up
         if os.path.exists(log_dir):

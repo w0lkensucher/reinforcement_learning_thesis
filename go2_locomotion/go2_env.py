@@ -30,6 +30,12 @@ class Go2Env:
         self.obs_scales = obs_cfg["obs_scales"]
         self.reward_scales = reward_cfg["reward_scales"]
 
+        self.episode_sums = dict()
+        for name in self.reward_scales.keys():
+            self.episode_sums[name] = torch.zeros((self.num_envs,), device=gs.device, dtype=gs.tc_float)
+
+        self.episode_sums['reward'] = torch.zeros((self.num_envs,), device=gs.device, dtype=gs.tc_float)
+
         # create scene
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.dt, substeps=2),
@@ -84,7 +90,7 @@ class Go2Env:
         self.robot.set_dofs_kv([self.env_cfg["kd"]] * self.num_actions, self.motors_dof_idx)
 
         # prepare reward functions and multiply reward scales by dt
-        self.reward_functions, self.episode_sums = dict(), dict()
+        self.reward_functions = dict()
         for name in self.reward_scales.keys():
             self.reward_scales[name] *= self.dt
             self.reward_functions[name] = getattr(self, "_reward_" + name)
@@ -175,6 +181,8 @@ class Go2Env:
             rew = reward_func() * self.reward_scales[name]
             self.rew_buf += rew
             self.episode_sums[name] += rew
+
+        self.episode_sums['reward'] += self.rew_buf
 
         # compute observations
         self.obs_buf = torch.cat(

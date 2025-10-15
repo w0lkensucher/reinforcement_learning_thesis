@@ -1,3 +1,4 @@
 *.code-workspace
 *.pyc
 .venv
+go2_locomotion/logs/
