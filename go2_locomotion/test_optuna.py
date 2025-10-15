@@ -7,6 +7,12 @@ from go2_env import Go2Env
 from rsl_rl.runners import OnPolicyRunner
 import numpy as np
 from go2_train_obstacle import get_cfgs
+import traceback
+
+os.environ['TORCH_LOGS'] = '+dynamo'
+os.environ['TORCHDYNAMO_DISABLE'] = '1'
+os.environ['TORCH_COMPILE_DISABLE'] = '1'
+os.environ['PYTORCH_DISABLE_DYNAMO'] = '1'
 
 def objective(trial):
     """Optuna objective function for hyperparameter optimization"""
@@ -66,6 +72,7 @@ def objective(trial):
         
     except Exception as e:
         print(f"Trial {trial.number} failed: {e}")
+        traceback.print_exc()  # <-- This prints the full error traceback to the terminal
         return -1000  # Large penalty for failed trials
 
 def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma, 
@@ -100,6 +107,7 @@ def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma,
         "num_steps_per_env": 24,
         "save_interval": 50,
         "seed": 1,
+        "empirical_normalization": True, 
     }
 
 if __name__ == "__main__":

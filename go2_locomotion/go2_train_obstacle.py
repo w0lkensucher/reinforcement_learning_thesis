@@ -1,5 +1,11 @@
 import argparse
 import os
+
+os.environ['TORCH_LOGS'] = '+dynamo'
+os.environ['TORCHDYNAMO_DISABLE'] = '1'
+os.environ['TORCH_COMPILE_DISABLE'] = '1'
+os.environ['PYTORCH_DISABLE_DYNAMO'] = '1'
+
 import pickle
 import shutil
 from importlib import metadata
@@ -27,19 +33,19 @@ def get_train_cfg(exp_name, max_iterations):
     train_cfg_dict = {
         "algorithm": {
             "class_name": "PPO",
-            "clip_param": 0.15,
+            "clip_param": 0.14112594271747939,
             "desired_kl": 0.01,
-            "entropy_coef": 0.03,
-            "gamma": 0.99,
+            "entropy_coef": 0.09847227294970444,
+            "gamma": 0.9821749211289272,
             "lam": 0.95,
-            "learning_rate": 0.0003,
+            "learning_rate": 9.603951203562604e-05,
             "max_grad_norm": 0.5,
-            "num_learning_epochs": 5,
+            "num_learning_epochs": 8,
             "num_mini_batches": 4,
             "schedule": "adaptive",
             "use_clipped_value_loss": True,
-            "value_loss_coef": 0.7,
-        },
+            "value_loss_coef": 2.5805037983234484,
+        },'obstacle_avoidance_scale': 0.504360534641974,
         "init_member_classes": {},
         "policy": {
             "activation": "elu",
@@ -125,15 +131,15 @@ def get_cfgs():
         # base pose
         "base_init_pos": [0.0, 0.0, 0.42],
         "base_init_quat": [1.0, 0.0, 0.0, 0.0],
-        "episode_length_s": 30.0,  # Longer episodes for obstacle navigation
+        "episode_length_s": 23.865854789774673,  # Longer episodes for obstacle navigation
         "resampling_time_s": 6.0,  # Longer command duration
         "action_scale": 0.25,
         "simulate_action_latency": True,
-        "clip_actions": 100.0,
+        "clip_actions": 1.0,
 
         # obstacle configuration - TEMPORARILY DISABLED for debugging
         'use_obstacles': True,  # Changed to False to test basic setup
-        'obstacle_density': 0.03,  # Start with fewer obstacles for easier learning
+        'obstacle_density': 0.01581711235886657,  # Start with fewer obstacles for easier learning
         'obstacle_types': ['box', 'cylinder'],
         'obstacle_height_range': [0.05, 0.12],  # Slightly lower obstacles
         'obstacle_width_range': [0.1, 0.25],    # Slightly smaller obstacles
@@ -157,13 +163,13 @@ def get_cfgs():
         "jump_height_threshold":0.1,
         "jump_reward_height":0.17,
         "reward_scales": {
-            "tracking_lin_vel": 1.0,
+            "tracking_lin_vel": 0.710311769413351,
             "tracking_ang_vel": 0.2,
             "lin_vel_z": -.5,
             "base_height": -10.0,
-            "action_rate": -0.01,
+            "action_rate": 0.14112594271747939,
             "similar_to_default": -0.1,
-            'obstacle_avoidance': 0.25,   # Reward for avoiding obstacles
+            'obstacle_avoidance': 0.504360534641974,   # Reward for avoiding obstacles
             'forward_progress': 0.1,     # Reward for forward movement
             'landing_stability':0.2,
             'jump_timing':0.3,
@@ -347,7 +353,7 @@ def main():
         elif randomize_strategy == 'performance':
             if (iterations_done - last_randomization) >= min_random_gap:
                 try:
-                    recent_reward = env.episode_sum['reward'].mean().item()
+                    recent_reward = env.rew_buf.mean().item()
                     last_randomization = performance_randomization(env, iterations_done, recent_reward, performance_threshold, last_randomization)
                 except:
                     pass
@@ -361,25 +367,36 @@ def main():
         if episode_counter >= randomize_interval:
             env.force_randomize_obstacles()
             episode_counter = 0
+        """
 
         # Get current training performance; evaluation is failing, idk why
         try:
-            # Method 1: Try to get from runner's internal storage
-            if hasattr(runner, 'tot_episodes') and runner.tot_episodes > 0:
-                # Get recent training reward (last few episodes)
-                recent_episodes = min(100, runner.tot_episodes)
-                training_reward = env.episode_sums['reward'][:recent_episodes].mean().item()
+            # Method 1: Get from runner's storage (most reliable for PPO)
+            if hasattr(runner, 'alg') and hasattr(runner.alg, 'storage'):
+                # Get recent rewards from the rollout buffer
+                rewards = runner.alg.storage.rewards  # Shape: [num_steps, num_envs]
+                training_reward = rewards.mean().item()
+                print(f"✓ Method 1: Got training reward from runner storage: {training_reward:.3f}")
             else:
-                # Method 2: Calculate from current environment state
-                training_reward = env.episode_sums['reward'].mean().item()
-        except:
-            # Method 3: Fallback - use environment's current reward buffer
+                raise AttributeError("No runner storage available")
+        except Exception as e:
+            print(f"Method 1 failed: {e}")
             try:
-                training_reward = env.reward_buf.mean().item()
-            except:
-                # Method 4: Ultimate fallback
-                print("⚠️  Could not get training reward, using 0")
-                training_reward = 0.0
+                # Method 2: Get from environment's current reward buffer
+                training_reward = env.rew_buf.mean().item()
+                print(f"✓ Method 2: Got training reward from env.rew_buf: {training_reward:.3f}")
+            except Exception as e:
+                print(f"Method 2 failed: {e}")
+                try:
+                    # Method 3: Get from environment's episode sums
+                    total_reward = sum(env.episode_sums[key].mean().item() for key in env.episode_sums.keys())
+                    training_reward = total_reward
+                    print(f"✓ Method 3: Got training reward from env.episode_sums: {training_reward:.3f}")
+                except Exception as e:
+                    print(f"Method 3 failed: {e}")
+                    # Method 4: Ultimate fallback
+                    print("⚠️  All methods failed, using 0 for training reward")
+                    training_reward = 0.0
         
         # Quick evaluation
         print(f"🔍 Evaluating at iteration {iterations_done}...")
@@ -398,7 +415,6 @@ def main():
                 'eval_std_reward': eval_stats['std_reward'],
                 'overfitting_gap': overfitting_gap
             })
-            """
     # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
 
