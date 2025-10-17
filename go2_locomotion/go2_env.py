@@ -58,7 +58,11 @@ class Go2Env:
             show_viewer=show_viewer,
         )
 
-        # add plain
+        # add wind force field; make it conditional later if needed
+        ff = gs.force_fields.Wind(direction=(1, 0, 0), strength=5.0, radius=10.0, center=(0, 0, 0))
+        self.scene.add_force_field(ff)
+
+        # add plane
         self.scene.add_entity(gs.morphs.URDF(file="urdf/plane/plane.urdf", fixed=True))
 
         # add robot
