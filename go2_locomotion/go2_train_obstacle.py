@@ -1,11 +1,17 @@
-import argparse
 import os
 
-os.environ['TORCH_LOGS'] = '+dynamo'
-os.environ['TORCHDYNAMO_DISABLE'] = '1'
-os.environ['TORCH_COMPILE_DISABLE'] = '1'
-os.environ['PYTORCH_DISABLE_DYNAMO'] = '1'
+if os.name != 'nt':
+    os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'local'
 
+    import sys
+    if 'distutils' in sys.modules:
+        del sys.modules['distutils']
+
+    import importlib
+    distutils_core = importlib.import_module('distutils.core')
+    print("Distutils core loaded from:", distutils_core.__file__)
+
+import argparse
 import pickle
 import shutil
 from importlib import metadata
@@ -137,8 +143,7 @@ def get_cfgs():
         "simulate_action_latency": True,
         "clip_actions": 1.0,
 
-        # obstacle configuration - TEMPORARILY DISABLED for debugging
-        'use_obstacles': True,  # Changed to False to test basic setup
+        'use_obstacles': True,
         'obstacle_density': 0.01581711235886657,  # Start with fewer obstacles for easier learning
         'obstacle_types': ['box', 'cylinder'],
         'obstacle_height_range': [0.05, 0.12],  # Slightly lower obstacles
@@ -328,6 +333,9 @@ def main():
     iterations_done = 0
 
     randomize_interval = env_cfg.get('randomize_every_n_episodes', 1500)
+
+    randomize_strategy = env_cfg.get('randomize_strategy', 'delayed')
+
     if randomize_strategy == 'delayed':
         episode_counter = 0
         reset_iteration = env_cfg.get('interval_reset', 150)
@@ -337,9 +345,6 @@ def main():
         performance_threshold = env_cfg.get('performance_threshold', 2.0)
     elif randomize_strategy == 'curriculum': # Placeholder for curriculum-based strategy TODO
         pass 
-
-    # change this depending on config
-    randomize_strategy = env_cfg.get('randomize_strategy', 'delayed')
 
     while iterations_done < args.max_iterations:
         current_batch = min(args.eval_interval, args.max_iterations - iterations_done)
