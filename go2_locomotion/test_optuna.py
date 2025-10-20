@@ -1,6 +1,17 @@
+import os
+if os.name != 'nt':
+    os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'local'
+
+    import sys
+    if 'distutils' in sys.modules:
+        del sys.modules['distutils']
+
+    import importlib
+    distutils_core = importlib.import_module('distutils.core')
+    print("Distutils core loaded from:", distutils_core.__file__)
+
 import optuna
 import pickle
-import os
 import shutil
 import genesis as gs
 from go2_env import Go2Env
