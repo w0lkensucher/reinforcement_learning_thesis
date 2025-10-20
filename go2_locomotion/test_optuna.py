@@ -8,6 +8,8 @@ from rsl_rl.runners import OnPolicyRunner
 import torch
 from go2_train_obstacle import get_cfgs
 import traceback
+import argparse
+from datetime import datetime
 
 def objective(trial):
     """Optuna objective function for hyperparameter optimization"""
@@ -106,15 +108,20 @@ def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma,
     }
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-e", "--study_name", type=str, default="go2-obstacles")
+    parser.add_argument("-B", "--n_trials", type=int, default=50)
+    args = parser.parse_args()
+
     gs.init(logging_level="warning")
     
     # Create study
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=50)
+    study.optimize(objective, n_trials=args.n_trials)
     
     print("Best parameters:", study.best_params)
     print("Best value:", study.best_value)
     
     # Save best parameters
-    with open('best_hyperparams.pkl', 'wb') as f:
+    with open(f'logs/hyperopt/{args.study_name}_{datetime.now().strftime("%Y%m%d")}.pkl', 'wb') as f:
         pickle.dump(study.best_params, f)
