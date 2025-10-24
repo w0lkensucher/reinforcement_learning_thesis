@@ -1,4 +1,15 @@
 import os
+if os.name != 'nt':
+    os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'local'
+
+    import sys
+    if 'distutils' in sys.modules:
+        del sys.modules['distutils']
+
+    import importlib
+    distutils_core = importlib.import_module('distutils.core')
+    print("Distutils core loaded from:", distutils_core.__file__)
+    
 import argparse
 import pickle
 import shutil
@@ -286,13 +297,36 @@ def main():
     parser.add_argument("-B", "--num_envs", type=int, default=2048)  # Fewer envs to start
     parser.add_argument("--max_iterations", type=int, default=500)   # More iterations for obstacle learning
     parser.add_argument("--eval_interval", type=int, default=50)     # Evaluate every 50 iterations
+    parser.add_argument("--params_pkl", type=str, default=None, help="Path to pickle file with optimized parameters")
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
 
     log_dir = f"logs/{args.exp_name}"
+
+    optimized_params_pkl = None
+    if args.params_pkl is not None:
+        with open(args.params_pkl, 'rb') as f:
+            optimized_params_pkl = pickle.load(f)
+
     env_cfg, obs_cfg, reward_cfg, command_cfg = get_cfgs()
     train_cfg = get_train_cfg(args.exp_name, args.max_iterations)
+
+    if optimized_params_pkl is not None:
+            # Update train_cfg with optimized_params_pkl
+            train_cfg["algorithm"]["learning_rate"] = optimized_params_pkl.get("learning_rate", train_cfg["algorithm"]["learning_rate"])
+            train_cfg["algorithm"]["clip_param"] = optimized_params_pkl.get("clip_param", train_cfg["algorithm"]["clip_param"])
+            train_cfg["algorithm"]["entropy_coef"] = optimized_params_pkl.get("entropy_coef", train_cfg["algorithm"]["entropy_coef"])
+            train_cfg["algorithm"]["gamma"] = optimized_params_pkl.get("gamma", train_cfg["algorithm"]["gamma"])
+            train_cfg["algorithm"]["value_loss_coef"] = optimized_params_pkl.get("value_loss_coef", train_cfg["algorithm"]["value_loss_coef"])
+            train_cfg["algorithm"]["num_learning_epochs"] = optimized_params_pkl.get("num_learning_epochs", train_cfg["algorithm"]["num_learning_epochs"])
+            # Update reward scales if present
+            reward_cfg["reward_scales"]["tracking_lin_vel"] = optimized_params_pkl.get("tracking_lin_vel_scale", reward_cfg["reward_scales"]["tracking_lin_vel"])
+            reward_cfg["reward_scales"]["obstacle_avoidance"] = optimized_params_pkl.get("obstacle_avoidance_scale", reward_cfg["reward_scales"]["obstacle_avoidance"])
+            reward_cfg["reward_scales"]["action_rate"] = optimized_params_pkl.get("action_rate_scale", reward_cfg["reward_scales"]["action_rate"])
+            # Update env_cfg if present
+            env_cfg["obstacle_density"] = optimized_params_pkl.get("obstacle_density", env_cfg["obstacle_density"])
+            env_cfg["episode_length_s"] = optimized_params_pkl.get("episode_length_s", env_cfg["episode_length_s"])
 
     if os.path.exists(log_dir):
         shutil.rmtree(log_dir)

@@ -22,7 +22,7 @@ import traceback
 import argparse
 from datetime import datetime
 
-def objective(trial):
+def objective(trial, num_envs=256):
     """Optuna objective function for hyperparameter optimization"""
     
     # Sample hyperparameters
@@ -63,7 +63,7 @@ def objective(trial):
     
     try:
         # Initialize environment and train
-        env = Go2Env(num_envs=512, env_cfg=env_cfg, obs_cfg=obs_cfg, 
+        env = Go2Env(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
                     reward_cfg=reward_cfg, command_cfg=command_cfg)
         
         runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
@@ -121,7 +121,8 @@ def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--study_name", type=str, default="go2-obstacles")
-    parser.add_argument("-B", "--n_trials", type=int, default=50)
+    parser.add_argument("-T", "--n_trials", type=int, default=50)
+    parser.add_argument("-N", "--num_envs", type=int, default=256)
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
