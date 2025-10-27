@@ -186,7 +186,7 @@ def get_cfgs():
         "lin_vel_y_range": [-0.2, 0.2], # Allow lateral movement for obstacle avoidance
         "ang_vel_range": [-0.3, 0.3],   # Allow turning for obstacle navigation
     } # separate updates based on training needs
-    env_cfg.update(get_randomization_cfg(strategy='delayed'))
+    env_cfg.update(get_randomization_cfg())
 
     return env_cfg, obs_cfg, reward_cfg, command_cfg
 
@@ -356,7 +356,7 @@ def main():
 
     randomize_interval = env_cfg.get('randomize_every_n_episodes', 1500)
 
-    randomize_strategy = env_cfg.get('randomize_strategy', 'delayed')
+    randomize_strategy = env_cfg.get('randomize_strategy', None)
 
     if randomize_strategy == 'delayed':
         episode_counter = 0
@@ -368,80 +368,81 @@ def main():
     elif randomize_strategy == 'curriculum': # Placeholder for curriculum-based strategy TODO
         pass 
 
-    while iterations_done < args.max_iterations:
-        current_batch = min(args.eval_interval, args.max_iterations - iterations_done)
-        runner.learn(num_learning_iterations=current_batch, init_at_random_ep_len=True)
-        iterations_done += current_batch
+    if randomize_strategy is not None:
+        while iterations_done < args.max_iterations:
+            current_batch = min(args.eval_interval, args.max_iterations - iterations_done)
+            runner.learn(num_learning_iterations=current_batch, init_at_random_ep_len=True)
+            iterations_done += current_batch
 
-        if randomize_strategy == 'delayed':
-            if iterations_done > reset_iteration:
-                episode_counter += args.num_envs * current_batch
-                episode_counter = delayed_randomization(env, episode_counter, randomize_interval)
-        elif randomize_strategy == 'performance':
-            if (iterations_done - last_randomization) >= min_random_gap:
-                try:
-                    recent_reward = env.rew_buf.mean().item()
-                    last_randomization = performance_randomization(env, iterations_done, recent_reward, performance_threshold, last_randomization)
-                except:
-                    pass
-        elif randomize_strategy == 'curriculum':
-            reset_iteration = 0 # Placeholder for curriculum-based strategy TODO
+            if randomize_strategy == 'delayed':
+                if iterations_done > reset_iteration:
+                    episode_counter += args.num_envs * current_batch
+                    episode_counter = delayed_randomization(env, episode_counter, randomize_interval)
+            elif randomize_strategy == 'performance':
+                if (iterations_done - last_randomization) >= min_random_gap:
+                    try:
+                        recent_reward = env.rew_buf.mean().item()
+                        last_randomization = performance_randomization(env, iterations_done, recent_reward, performance_threshold, last_randomization)
+                    except:
+                        pass
+            elif randomize_strategy == 'curriculum':
+                reset_iteration = 0 # Placeholder for curriculum-based strategy TODO
 
 
-        """
-        episode_counter += args.num_envs * current_batch
+            """
+            episode_counter += args.num_envs * current_batch
 
-        if episode_counter >= randomize_interval:
-            env.force_randomize_obstacles()
-            episode_counter = 0
-        """
+            if episode_counter >= randomize_interval:
+                env.force_randomize_obstacles()
+                episode_counter = 0
+            """
 
-        # Get current training performance; evaluation is failing, idk why
-        try:
-            # Method 1: Get from runner's storage (most reliable for PPO)
-            if hasattr(runner, 'alg') and hasattr(runner.alg, 'storage'):
-                # Get recent rewards from the rollout buffer
-                rewards = runner.alg.storage.rewards  # Shape: [num_steps, num_envs]
-                training_reward = rewards.mean().item()
-                print(f"✓ Method 1: Got training reward from runner storage: {training_reward:.3f}")
-            else:
-                raise AttributeError("No runner storage available")
-        except Exception as e:
-            print(f"Method 1 failed: {e}")
+            # Get current training performance; evaluation is failing, idk why
             try:
-                # Method 2: Get from environment's current reward buffer
-                training_reward = env.rew_buf.mean().item()
-                print(f"✓ Method 2: Got training reward from env.rew_buf: {training_reward:.3f}")
+                # Method 1: Get from runner's storage (most reliable for PPO)
+                if hasattr(runner, 'alg') and hasattr(runner.alg, 'storage'):
+                    # Get recent rewards from the rollout buffer
+                    rewards = runner.alg.storage.rewards  # Shape: [num_steps, num_envs]
+                    training_reward = rewards.mean().item()
+                    print(f"✓ Method 1: Got training reward from runner storage: {training_reward:.3f}")
+                else:
+                    raise AttributeError("No runner storage available")
             except Exception as e:
-                print(f"Method 2 failed: {e}")
+                print(f"Method 1 failed: {e}")
                 try:
-                    # Method 3: Get from environment's episode sums
-                    total_reward = sum(env.episode_sums[key].mean().item() for key in env.episode_sums.keys())
-                    training_reward = total_reward
-                    print(f"✓ Method 3: Got training reward from env.episode_sums: {training_reward:.3f}")
+                    # Method 2: Get from environment's current reward buffer
+                    training_reward = env.rew_buf.mean().item()
+                    print(f"✓ Method 2: Got training reward from env.rew_buf: {training_reward:.3f}")
                 except Exception as e:
-                    print(f"Method 3 failed: {e}")
-                    # Method 4: Ultimate fallback
-                    print("⚠️  All methods failed, using 0 for training reward")
-                    training_reward = 0.0
-        
-        # Quick evaluation
-        print(f"🔍 Evaluating at iteration {iterations_done}...")
-        eval_stats = evaluate_during_training(runner, env_cfg, obs_cfg, reward_cfg, command_cfg)
-        
-        # Calculate overfitting gap
-        overfitting_gap = training_reward - eval_stats['mean_reward']
-        
-        # Log results
-        with open(eval_log_file, 'a', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=['iteration', 'training_reward', 'eval_mean_reward', 'eval_std_reward', 'overfitting_gap'])
-            writer.writerow({
-                'iteration': iterations_done,
-                'training_reward': training_reward,
-                'eval_mean_reward': eval_stats['mean_reward'],
-                'eval_std_reward': eval_stats['std_reward'],
-                'overfitting_gap': overfitting_gap
-            })
+                    print(f"Method 2 failed: {e}")
+                    try:
+                        # Method 3: Get from environment's episode sums
+                        total_reward = sum(env.episode_sums[key].mean().item() for key in env.episode_sums.keys())
+                        training_reward = total_reward
+                        print(f"✓ Method 3: Got training reward from env.episode_sums: {training_reward:.3f}")
+                    except Exception as e:
+                        print(f"Method 3 failed: {e}")
+                        # Method 4: Ultimate fallback
+                        print("⚠️  All methods failed, using 0 for training reward")
+                        training_reward = 0.0
+            
+            # Quick evaluation
+            print(f"🔍 Evaluating at iteration {iterations_done}...")
+            eval_stats = evaluate_during_training(runner, env_cfg, obs_cfg, reward_cfg, command_cfg)
+            
+            # Calculate overfitting gap
+            overfitting_gap = training_reward - eval_stats['mean_reward']
+            
+            # Log results
+            with open(eval_log_file, 'a', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=['iteration', 'training_reward', 'eval_mean_reward', 'eval_std_reward', 'overfitting_gap'])
+                writer.writerow({
+                    'iteration': iterations_done,
+                    'training_reward': training_reward,
+                    'eval_mean_reward': eval_stats['mean_reward'],
+                    'eval_std_reward': eval_stats['std_reward'],
+                    'overfitting_gap': overfitting_gap
+                })
     # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
 
