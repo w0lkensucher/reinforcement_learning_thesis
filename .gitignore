@@ -3,3 +3,4 @@
 .venv
 go2_locomotion/logs/
 compare_cfg.py
+*.zip
