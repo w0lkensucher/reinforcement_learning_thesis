@@ -313,6 +313,7 @@ def main():
     train_cfg = get_train_cfg(args.exp_name, args.max_iterations)
 
     if optimized_params_pkl is not None:
+            print("Applying optimized parameters from pickle file...")
             # Update train_cfg with optimized_params_pkl
             train_cfg["algorithm"]["learning_rate"] = optimized_params_pkl.get("learning_rate", train_cfg["algorithm"]["learning_rate"])
             train_cfg["algorithm"]["clip_param"] = optimized_params_pkl.get("clip_param", train_cfg["algorithm"]["clip_param"])
@@ -387,14 +388,12 @@ def main():
                         pass
             elif randomize_strategy == 'curriculum':
                 reset_iteration = 0 # Placeholder for curriculum-based strategy TODO
-
-
             """
             episode_counter += args.num_envs * current_batch
 
             if episode_counter >= randomize_interval:
-                env.force_randomize_obstacles()
-                episode_counter = 0
+            env.force_randomize_obstacles()
+            episode_counter = 0
             """
 
             # Get current training performance; evaluation is failing, idk why
@@ -444,7 +443,11 @@ def main():
                     'overfitting_gap': overfitting_gap
                 })
     # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
-
+    else:
+        while iterations_done < args.max_iterations:
+            current_batch = min(args.eval_interval, args.max_iterations - iterations_done)
+            runner.learn(num_learning_iterations=current_batch, init_at_random_ep_len=True)
+            iterations_done += current_batch
 
 if __name__ == "__main__":
     main()
