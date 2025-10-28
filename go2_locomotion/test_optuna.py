@@ -21,6 +21,7 @@ from go2_train_obstacle import get_cfgs
 import traceback
 import argparse
 from datetime import datetime
+from upload_file_to_gdrive import upload_file, authenticate_google_drive, send_discord_notification
 
 def objective(trial, num_envs=256):
     """Optuna objective function for hyperparameter optimization"""
@@ -134,6 +135,21 @@ if __name__ == "__main__":
     print("Best parameters:", study.best_params)
     print("Best value:", study.best_value)
     
+    filename = f'logs/hyperopt/{args.study_name}_{datetime.now().strftime("%Y%m%d")}.pkl'
     # Save best parameters
-    with open(f'logs/hyperopt/{args.study_name}_{datetime.now().strftime("%Y%m%d")}.pkl', 'wb') as f:
+    with open(filename, 'wb') as f:
         pickle.dump(study.best_params, f)
+
+        try:
+            service = authenticate_google_drive()
+            result = upload_file(service, 
+                        filename, 
+                        drive_filename=os.path.basename(filename), 
+                        folder_id=None)
+            
+            if result:
+                webhook_url = "https://discord.com/api/webhooks/1432834755107229756/M8hquK5JNlXRhGvbvo5M0nRNN5J2Y7t3dgz3GNqJQPM4flMLAOfprpsZo-v9yh7ieSqE"
+                message = (f"✅ Optuna study '{filename}' completed!\n")
+                send_discord_notification(webhook_url, message)
+        except Exception as e:
+            print(f"❌ Error uploading file to Google Drive: {e}")

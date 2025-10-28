@@ -4,3 +4,4 @@
 go2_locomotion/logs/
 compare_cfg.py
 *.zip
+credentials.json
