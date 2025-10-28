@@ -21,7 +21,54 @@ from go2_train_obstacle import get_cfgs
 import traceback
 import argparse
 from datetime import datetime
-from upload_file_to_gdrive import upload_file, authenticate_google_drive, send_discord_notification
+from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_discord_notification, zip_log_folder
+
+import sys
+from go2_train_obstacle import main as train_main
+
+def start_training_with_params(filename, study_name):
+    # Modify sys.argv to pass arguments to the training script
+    original_argv = sys.argv.copy()
+    sys.argv = [
+        'go2_train_obstacle.py',
+        '-e', f'{study_name}_optimized',
+        '--num_envs', '2048',
+        '--max_iterations', '500',
+        '--params_pkl', filename
+    ]
+    
+    try:
+        # Call the training main function directly
+        train_main()
+        print("✅ Training completed successfully!")
+
+        log_folder = f"logs/{study_name}_optimized"
+        if os.path.exists(log_folder):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            zip_filename = f"logs/{study_name}_optimized_{timestamp}.zip"
+            
+            if zip_log_folder(log_folder, zip_filename):
+                # Upload zipped logs to Google Drive
+                try:
+                    service = authenticate_google_drive()
+                    result = upload_file(service, zip_filename, 
+                                       drive_filename=os.path.basename(zip_filename))
+                    if result:
+                        print(f"✅ Training logs uploaded to Google Drive: {result.get('webViewLink')}")
+                        return result.get('webViewLink')
+                    else:
+                        print("❌ Failed to upload training logs")
+                except Exception as e:
+                    print(f"❌ Error uploading training logs: {e}")
+            else:
+                print("❌ Failed to zip log folder")
+        else:
+            print(f"❌ Log folder not found: {log_folder}")
+    except Exception as e:
+        print(f"❌ Training failed: {e}")
+    finally:
+        # Restore original argv
+        sys.argv = original_argv
 
 def objective(trial, num_envs=256):
     """Optuna objective function for hyperparameter optimization"""
@@ -140,16 +187,20 @@ if __name__ == "__main__":
     with open(filename, 'wb') as f:
         pickle.dump(study.best_params, f)
 
-        try:
-            service = authenticate_google_drive()
-            result = upload_file(service, 
-                        filename, 
-                        drive_filename=os.path.basename(filename), 
-                        folder_id=None)
-            
-            if result:
-                webhook_url = "https://discord.com/api/webhooks/1432834755107229756/M8hquK5JNlXRhGvbvo5M0nRNN5J2Y7t3dgz3GNqJQPM4flMLAOfprpsZo-v9yh7ieSqE"
-                message = (f"✅ Optuna study '{filename}' completed!\n")
-                send_discord_notification(webhook_url, message)
-        except Exception as e:
-            print(f"❌ Error uploading file to Google Drive: {e}")
+    webhook_url = "https://discord.com/api/webhooks/1432834755107229756/M8hquK5JNlXRhGvbvo5M0nRNN5J2Y7t3dgz3GNqJQPM4flMLAOfprpsZo-v9yh7ieSqE"
+    try:
+        message = (f"✅ Optuna study '{filename}' completed!\n"
+                    "Now starting training with best hyperparameters.")
+        send_discord_notification(webhook_url, message)
+    except Exception as e:
+        print(f"❌ Error sending Discord notification: {e}")
+    
+    try:
+        start_training_with_params(filename, args.study_name)
+        message = (f"✅ Training with best hyperparameters from '{filename}' completed successfully!\n"
+                   f"Uploaded logs ({args.study_name}_optimized) to Google Drive.")
+
+    except Exception as e:
+        message = (f"❌ Training with best hyperparameters from '{filename}' failed: {e}")
+
+    send_discord_notification(webhook_url, message)

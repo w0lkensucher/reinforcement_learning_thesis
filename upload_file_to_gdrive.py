@@ -1,6 +1,7 @@
 import argparse
 import os
 import requests
+import zipfile
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -78,6 +79,22 @@ def send_discord_notification(webhook_url, message):
             print(f"❌ Discord notification failed: {response.status_code}")
     except Exception as e:
         print(f"❌ Discord notification failed: {e}")
+
+def zip_log_folder(log_folder_path, zip_filename):
+    """Zip the log folder"""
+    try:
+        with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(log_folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Get relative path for the zip
+                    arcname = os.path.relpath(file_path, os.path.dirname(log_folder_path))
+                    zipf.write(file_path, arcname)
+        print(f"✅ Log folder zipped: {zip_filename}")
+        return True
+    except Exception as e:
+        print(f"❌ Error zipping log folder: {e}")
+        return False
 
 def main():
     parser = argparse.ArgumentParser(description='Upload a file to Google Drive')
