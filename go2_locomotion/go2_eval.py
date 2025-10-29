@@ -1,5 +1,16 @@
-import argparse
 import os
+if os.name != 'nt':
+    os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'local'
+
+    import sys
+    if 'distutils' in sys.modules:
+        del sys.modules['distutils']
+
+    import importlib
+    distutils_core = importlib.import_module('distutils.core')
+    print("Distutils core loaded from:", distutils_core.__file__)
+    
+import argparse
 import pickle
 from importlib import metadata
 

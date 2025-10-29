@@ -10,7 +10,7 @@ def gs_rand_float(lower, upper, shape, device):
 
 
 class Go2Env:
-    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
+    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, wind_force=False, uneven_terrain=False):
         self.num_envs = num_envs
         self.num_obs = obs_cfg["num_obs"]
         self.num_privileged_obs = None
@@ -59,8 +59,9 @@ class Go2Env:
         )
 
         # add wind force field; make it conditional later if needed
-        ff = gs.force_fields.Wind(direction=(1, 0, 0), strength=5.0, radius=10.0, center=(0, 0, 0))
-        self.scene.add_force_field(ff)
+        if wind_force:
+            ff = gs.force_fields.Wind(direction=(1, 0, 0), strength=5.0, radius=10.0, center=(0, 0, 0))
+            self.scene.add_force_field(ff)
 
         # add plane
         self.scene.add_entity(gs.morphs.URDF(file="urdf/plane/plane.urdf", fixed=True))
@@ -188,6 +189,7 @@ class Go2Env:
 
         self.episode_sums['reward'] += self.rew_buf
 
+        low_obs, high_obs = self._detect_nearby_obstacles()
         # compute observations
         self.obs_buf = torch.cat(
             [
@@ -197,6 +199,8 @@ class Go2Env:
                 (self.dof_pos - self.default_dof_pos) * self.obs_scales["dof_pos"],  # 12
                 self.dof_vel * self.obs_scales["dof_vel"],  # 12
                 self.actions,  # 12
+                low_obs.unsqueeze(1),   # 1: signal for low obstacle
+                high_obs.unsqueeze(1),  # 1: signal for high obstacle
             ],
             axis=-1,
         )
@@ -607,3 +611,26 @@ class Go2Env:
 
         except Exception as e:
             print(f"Warning: Failed to move obstacles: {e}")
+
+    def _reward_stable_walk(self):
+        """Reward for stable walking (low vertical movement and angular velocity)"""
+        # Penalize vertical velocity (galloping)
+        vertical_penalty = torch.square(self.base_lin_vel[:, 2])
+        
+        # Penalize deviation from target base height
+        height_penalty = torch.square(self.base_pos[:, 2] - self.reward_cfg['base_height_target'])
+        
+        # Penalize high angular velocity (unstable)
+        ang_vel_penalty = torch.sum(torch.square(self.base_ang_vel), dim=1)
+        
+        # Return exponential reward (higher values = more stable)
+        stability_sigma = self.reward_cfg.get('stability_sigma', 0.1)
+        stability_score = torch.exp(-(vertical_penalty + height_penalty + ang_vel_penalty) / stability_sigma)
+        
+        return stability_score
+
+    def _reward_straight_walk(self):
+        """Reward for walking straight (penalize sideways movement)"""
+        lateral_penalty = torch.square(self.base_lin_vel[:, 1])
+        straight_sigma = self.reward_cfg.get('straight_sigma', 0.1)
+        return torch.exp(-lateral_penalty / straight_sigma)

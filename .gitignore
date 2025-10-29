@@ -7,3 +7,5 @@ compare_cfg.py
 credentials.json
 logs/
 *.pkl
+test_upload.py
+token.json

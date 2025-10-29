@@ -152,7 +152,7 @@ def get_cfgs():
         'clear_radius': 3.0,                     # Larger clear area around spawn
     }
     obs_cfg = {
-        "num_obs": 45,
+        "num_obs": 47,
         "obs_scales": {
             "lin_vel": 2.0,
             "ang_vel": 0.25,
@@ -166,6 +166,8 @@ def get_cfgs():
         "feet_height_target": 0.075,
         "jump_height_threshold":0.1,
         "jump_reward_height":0.17,
+        "stability_sigma": 0.1,
+        "straight_sigma": 0.1,
         "reward_scales": {
             "tracking_lin_vel": 0.710311769413351,
             "tracking_ang_vel": 0.2,
@@ -178,6 +180,8 @@ def get_cfgs():
             'landing_stability':0.2,
             'jump_timing':0.3,
             'jump_reward':0.5,
+            "stable_walk": 1.0,
+            "straight_walk": 0.5,
         },
     }
     command_cfg = {

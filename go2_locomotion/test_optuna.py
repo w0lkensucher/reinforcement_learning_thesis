@@ -32,7 +32,7 @@ def start_training_with_params(filename, study_name):
     sys.argv = [
         'go2_train_obstacle.py',
         '-e', f'{study_name}_optimized',
-        '--num_envs', '2048',
+        '--num_envs', '512',
         '--max_iterations', '500',
         '--params_pkl', filename
     ]
@@ -85,7 +85,11 @@ def objective(trial, num_envs=256):
     tracking_lin_vel_scale = trial.suggest_float('tracking_lin_vel_scale', 0.5, 2.0)
     obstacle_avoidance_scale = trial.suggest_float('obstacle_avoidance_scale', 0.1, 1.0)
     action_rate_scale = trial.suggest_float('action_rate_scale', -0.02, -0.001)
-    
+    stable_walk_scale = trial.suggest_float('stable_walk_scale', 0.1, 2.0)
+    straight_walk_scale = trial.suggest_float('straight_walk_scale', 0.1, 2.0)
+    stability_sigma = trial.suggest_float('stability_sigma', 0.05, 0.3)
+    straight_sigma = trial.suggest_float('straight_sigma', 0.05, 0.3)
+
     # Environment parameters
     obstacle_density = trial.suggest_float('obstacle_density', 0.01, 0.05)
     episode_length = trial.suggest_float('episode_length_s', 15.0, 40.0)
@@ -100,7 +104,11 @@ def objective(trial, num_envs=256):
     reward_cfg['reward_scales']['tracking_lin_vel'] = tracking_lin_vel_scale
     reward_cfg['reward_scales']['obstacle_avoidance'] = obstacle_avoidance_scale
     reward_cfg['reward_scales']['action_rate'] = action_rate_scale
-    
+    reward_cfg['reward_scales']['stable_walk'] = stable_walk_scale
+    reward_cfg['reward_scales']['straight_walk'] = straight_walk_scale
+    reward_cfg['stability_sigma'] = stability_sigma
+    reward_cfg['straight_sigma'] = straight_sigma
+
     train_cfg = get_train_cfg_optimized(trial, learning_rate, clip_param, 
                                        entropy_coef, gamma, value_loss_coef, 
                                        num_learning_epochs)
@@ -187,6 +195,7 @@ if __name__ == "__main__":
     with open(filename, 'wb') as f:
         pickle.dump(study.best_params, f)
 
+    # make private later on
     webhook_url = "https://discord.com/api/webhooks/1432834755107229756/M8hquK5JNlXRhGvbvo5M0nRNN5J2Y7t3dgz3GNqJQPM4flMLAOfprpsZo-v9yh7ieSqE"
     try:
         message = (f"✅ Optuna study '{filename}' completed!\n"
