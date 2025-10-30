@@ -10,3 +10,4 @@ logs/
 test_upload.py
 token.json
 train_from_script.py
+.env

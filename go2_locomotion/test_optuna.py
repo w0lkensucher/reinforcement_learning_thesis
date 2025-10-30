@@ -26,8 +26,11 @@ from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_d
 import sys
 from go2_train_obstacle import main as train_main
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # make private later on
-webhook_url = "https://discord.com/api/webhooks/1432834755107229756/M8hquK5JNlXRhGvbvo5M0nRNN5J2Y7t3dgz3GNqJQPM4flMLAOfprpsZo-v9yh7ieSqE"
+webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
 
 def start_training_with_params(filename, study_name):
     # Modify sys.argv to pass arguments to the training script
