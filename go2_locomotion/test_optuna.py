@@ -26,14 +26,17 @@ from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_d
 import sys
 from go2_train_obstacle import main as train_main
 
+# make private later on
+webhook_url = "https://discord.com/api/webhooks/1432834755107229756/M8hquK5JNlXRhGvbvo5M0nRNN5J2Y7t3dgz3GNqJQPM4flMLAOfprpsZo-v9yh7ieSqE"
+
 def start_training_with_params(filename, study_name):
     # Modify sys.argv to pass arguments to the training script
     original_argv = sys.argv.copy()
     sys.argv = [
         'go2_train_obstacle.py',
         '-e', f'{study_name}_optimized',
-        '--num_envs', '512',
-        '--max_iterations', '500',
+        '--num_envs', '3072',
+        '--max_iterations', '2000',
         '--params_pkl', filename
     ]
     
@@ -57,15 +60,15 @@ def start_training_with_params(filename, study_name):
                         print(f"✅ Training logs uploaded to Google Drive: {result.get('webViewLink')}")
                         return result.get('webViewLink')
                     else:
-                        print("❌ Failed to upload training logs")
+                        send_discord_notification(webhook_url, "❌ Failed to upload training logs")
                 except Exception as e:
-                    print(f"❌ Error uploading training logs: {e}")
+                    send_discord_notification(webhook_url, f"❌ Error uploading training logs: {e}")
             else:
-                print("❌ Failed to zip log folder")
+                send_discord_notification(webhook_url, f"❌ Failed to zip log folder: {log_folder}")
         else:
-            print(f"❌ Log folder not found: {log_folder}")
+            send_discord_notification(webhook_url,f"❌ Log folder not found: {log_folder}")
     except Exception as e:
-        print(f"❌ Training failed: {e}")
+        send_discord_notification(webhook_url, f"❌ Training failed: {e}")
     finally:
         # Restore original argv
         sys.argv = original_argv
@@ -195,8 +198,6 @@ if __name__ == "__main__":
     with open(filename, 'wb') as f:
         pickle.dump(study.best_params, f)
 
-    # make private later on
-    webhook_url = "https://discord.com/api/webhooks/1432834755107229756/M8hquK5JNlXRhGvbvo5M0nRNN5J2Y7t3dgz3GNqJQPM4flMLAOfprpsZo-v9yh7ieSqE"
     try:
         message = (f"✅ Optuna study '{filename}' completed!\n"
                     "Now starting training with best hyperparameters.")

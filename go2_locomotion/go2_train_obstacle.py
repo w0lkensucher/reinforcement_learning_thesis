@@ -304,8 +304,14 @@ def main():
     parser.add_argument("--params_pkl", type=str, default=None, help="Path to pickle file with optimized parameters")
     args = parser.parse_args()
 
-    gs.init(logging_level="warning")
-
+    try:
+        gs.init(logging_level="warning")
+    except RuntimeError as e:
+        if 'already initialized' in str(e):
+            print("Genesis already initialized, continuing...")
+        else:
+            raise e
+        
     log_dir = f"logs/{args.exp_name}"
 
     optimized_params_pkl = None
