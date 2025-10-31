@@ -613,24 +613,38 @@ class Go2Env:
             print(f"Warning: Failed to move obstacles: {e}")
 
     def _reward_stable_walk(self):
-        """Reward for stable walking (low vertical movement and angular velocity)"""
-        # Penalize vertical velocity (galloping)
+        """Reward stability but only when moving forward"""
+        # Only reward stability when robot is moving forward
+        forward_velocity = self.base_lin_vel[:, 0]
+        
+        # If not moving forward, give no stability reward
+        moving_mask = forward_velocity > 0.1  # Only when moving > 0.1 m/s
+        
+        # Penalize vertical velocity (galloping) only when moving
         vertical_penalty = torch.square(self.base_lin_vel[:, 2])
-        
-        # Penalize deviation from target base height
         height_penalty = torch.square(self.base_pos[:, 2] - self.reward_cfg['base_height_target'])
-        
-        # Penalize high angular velocity (unstable)
         ang_vel_penalty = torch.sum(torch.square(self.base_ang_vel), dim=1)
         
-        # Return exponential reward (higher values = more stable)
         stability_sigma = self.reward_cfg.get('stability_sigma', 0.1)
         stability_score = torch.exp(-(vertical_penalty + height_penalty + ang_vel_penalty) / stability_sigma)
         
-        return stability_score
+        # Only give stability reward when moving
+        return stability_score * moving_mask.float()
 
     def _reward_straight_walk(self):
         """Reward for walking straight (penalize sideways movement)"""
         lateral_penalty = torch.square(self.base_lin_vel[:, 1])
         straight_sigma = self.reward_cfg.get('straight_sigma', 0.1)
         return torch.exp(-lateral_penalty / straight_sigma)
+    
+    def _reward_forward_movement(self):
+        """Heavily reward forward movement, penalize standing still"""
+        forward_vel = self.base_lin_vel[:, 0]
+        
+        # Heavy penalty for standing still
+        standing_penalty = torch.where(forward_vel < 0.1, -2.0, 0.0)
+        
+        # Reward forward movement
+        forward_reward = torch.clamp(forward_vel, 0, 2.0)  # Cap at 2 m/s
+        
+        return forward_reward + standing_penalty

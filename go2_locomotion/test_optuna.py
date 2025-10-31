@@ -90,7 +90,7 @@ def objective(trial, num_envs=256):
     num_learning_epochs = trial.suggest_int('num_learning_epochs', 3, 10)
     
     # Reward scale parameters
-    tracking_lin_vel_scale = trial.suggest_float('tracking_lin_vel_scale', 0.5, 2.0)
+    tracking_lin_vel_scale = trial.suggest_float('tracking_lin_vel_scale', 1.5, 3.0)
     obstacle_avoidance_scale = trial.suggest_float('obstacle_avoidance_scale', 0.1, 1.0)
     action_rate_scale = trial.suggest_float('action_rate_scale', -0.02, -0.001)
     stable_walk_scale = trial.suggest_float('stable_walk_scale', 0.1, 2.0)

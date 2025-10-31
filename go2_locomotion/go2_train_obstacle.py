@@ -182,6 +182,7 @@ def get_cfgs():
             'jump_reward':0.5,
             "stable_walk": 1.0,
             "straight_walk": 0.5,
+            "forward_movement": 3.0
         },
     }
     command_cfg = {

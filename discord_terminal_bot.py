@@ -238,6 +238,26 @@ Examples:
 !kill test_optuna.py
 ```"""
     await ctx.send(help_text)
+    
+@bot.command(name='check_movement')
+async def check_movement(ctx):
+    """Check if robot is moving in current training"""
+    if not is_authorized(ctx.author.id):
+        await ctx.send("❌ You are not authorized to use this bot.")
+        return
+    
+    try:
+        # Check recent logs for velocity
+        command = "grep -i 'vel\|reward' /home/anou/Documents/reinforcement_learning_thesis/go2_locomotion/logs/*/summaries.txt | tail -10"
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        
+        if result.stdout:
+            await ctx.send(f"```\nRecent velocity/reward data:\n{result.stdout[:1900]}\n```")
+        else:
+            await ctx.send("❌ No movement data found in logs")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Error checking movement: {e}")
 
 # Run the bot
 if __name__ == "__main__":
