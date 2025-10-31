@@ -22,6 +22,9 @@ import traceback
 import argparse
 from datetime import datetime
 from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_discord_notification, zip_log_folder
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import sys
 from go2_train_obstacle import main as train_main
@@ -29,7 +32,6 @@ from go2_train_obstacle import main as train_main
 from dotenv import load_dotenv
 load_dotenv()
 
-# make private later on
 webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
 
 def start_training_with_params(filename, study_name):
@@ -60,7 +62,7 @@ def start_training_with_params(filename, study_name):
                     result = upload_file(service, zip_filename, 
                                        drive_filename=os.path.basename(zip_filename))
                     if result:
-                        print(f"✅ Training logs uploaded to Google Drive: {result.get('webViewLink')}")
+                        send_discord_notification(webhook_url, f"✅ Training logs uploaded to Google Drive: {result.get('webViewLink')}")
                         return result.get('webViewLink')
                     else:
                         send_discord_notification(webhook_url, "❌ Failed to upload training logs")
