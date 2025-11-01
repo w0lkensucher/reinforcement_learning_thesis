@@ -310,6 +310,8 @@ def main():
     except RuntimeError as e:
         if 'already initialized' in str(e):
             print("Genesis already initialized, continuing...")
+        elif 'FutureWarning' in str(e):
+            print("Genesis FutureWarning encountered, continuing...")
         else:
             raise e
         
