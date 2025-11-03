@@ -51,8 +51,7 @@ async def execute_command(ctx, *, command):
             shell=True, 
             capture_output=True, 
             text=True, 
-            timeout=30,
-            cwd='/home/anou/Documents/reinforcement_learning_thesis'
+            timeout=30
         )
         
         # Format output
@@ -238,7 +237,7 @@ Examples:
 !kill test_optuna.py
 ```"""
     await ctx.send(help_text)
-    
+
 @bot.command(name='check_movement')
 async def check_movement(ctx):
     """Check if robot is moving in current training"""
