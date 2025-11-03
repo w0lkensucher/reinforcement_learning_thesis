@@ -1,3 +1,4 @@
+import sys
 import discord
 from discord.ext import commands
 import subprocess
@@ -31,6 +32,42 @@ async def on_ready():
     print(f'🤖 {bot.user} is now online!')
     print(f'Bot ID: {bot.user.id}')
 
+# Store current working directory and venv per user
+user_directories = {}
+user_venvs = {}
+
+@bot.command(name='activate_venv')
+async def activate_venv(ctx, venv_path=None):
+    """Activate a virtual environment"""
+    if not is_authorized(ctx.author.id):
+        await ctx.send("❌ You are not authorized to use this bot.")
+        return
+    
+    if venv_path is None:
+        venv_path = "/home/anou/Documents/reinforcement_learning_thesis/.venv"
+    
+    # Check if venv exists
+    activate_script = os.path.join(venv_path, "bin", "activate")
+    if os.path.exists(activate_script):
+        user_venvs[ctx.author.id] = venv_path
+        await ctx.send(f"✅ Virtual environment activated: `{venv_path}`")
+    else:
+        await ctx.send(f"❌ Virtual environment not found: `{venv_path}`")
+
+@bot.command(name='deactivate_venv')
+async def deactivate_venv(ctx):
+    """Deactivate current virtual environment"""
+    if not is_authorized(ctx.author.id):
+        await ctx.send("❌ You are not authorized to use this bot.")
+        return
+    
+    if ctx.author.id in user_venvs:
+        del user_venvs[ctx.author.id]
+        await ctx.send("✅ Virtual environment deactivated")
+    else:
+        await ctx.send("❌ No virtual environment active")
+
+# Modify the existing cmd function
 @bot.command(name='cmd')
 async def execute_command(ctx, *, command):
     """Execute a terminal command"""
@@ -39,32 +76,40 @@ async def execute_command(ctx, *, command):
         return
     
     try:
-        # Security: Block dangerous commands
+        # Security check...
         dangerous_commands = ['rm -rf /', 'sudo rm -rf', 'dd if=', 'mkfs', 'fdisk']
         if any(dangerous in command.lower() for dangerous in dangerous_commands):
             await ctx.send("❌ Dangerous command blocked for safety.")
             return
         
-        # Execute command with timeout
+        # Get user's working directory
+        working_dir = user_directories.get(ctx.author.id, os.getcwd())
+        
+        # Prepare command with venv activation if needed
+        venv_path = user_venvs.get(ctx.author.id)
+        if venv_path:
+            activate_script = os.path.join(venv_path, "bin", "activate")
+            command = f"source {activate_script} && {command}"
+        
+        # Execute command
         result = subprocess.run(
             command, 
             shell=True, 
             capture_output=True, 
             text=True, 
-            timeout=30
+            timeout=30,
+            cwd=working_dir
         )
         
-        # Format output
+        # Rest of the function remains the same...
         output = result.stdout if result.stdout else "Command executed successfully (no output)"
         error = result.stderr if result.stderr else ""
         
-        # Discord message limit is 2000 characters
         if len(output) > 1900:
             output = output[:1900] + "... (truncated)"
         if len(error) > 1900:
             error = error[:1900] + "... (truncated)"
         
-        # Send response
         response = f"```bash\n$ {command}\n{output}"
         if error:
             response += f"\nErrors:\n{error}"
@@ -257,6 +302,47 @@ async def check_movement(ctx):
             
     except Exception as e:
         await ctx.send(f"❌ Error checking movement: {e}")
+
+@bot.command(name='restart_bot')
+async def restart_bot(ctx):
+    """Restart the Discord bot"""
+    if not is_authorized(ctx.author.id):
+        await ctx.send("❌ You are not authorized to use this bot.")
+        return
+    
+    await ctx.send("🔄 Restarting bot...")
+    await bot.close()
+    os.execv(sys.executable, ['python'] + sys.argv)
+
+@bot.command(name='start_training')
+async def start_training(ctx, params_pkl=None, study_name=None):
+    """Start training process"""
+    if not is_authorized(ctx.author.id):
+        await ctx.send("❌ You are not authorized to use this bot.")
+        return
+    
+    try:
+        # Check if already running
+        if 'training' in running_processes:
+            await ctx.send("❌ Training is already running!")
+            return
+
+        command = f"cd /home/anou/Documents/reinforcement_learning_thesis/go2_locomotion && python train_from_script.py --study_name {study_name} --params_pkl {params_pkl}"
+
+        # Start process in background
+        process = subprocess.Popen(
+            command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        running_processes['training'] = process
+        await ctx.send(f"🚀 Started training: python start_from_script.py --study_name {study_name} --params_pkl {params_pkl}\nPID: {process.pid}")
+        
+    except Exception as e:
+        await ctx.send(f"❌ Failed to start training: {e}")
 
 # Run the bot
 if __name__ == "__main__":
