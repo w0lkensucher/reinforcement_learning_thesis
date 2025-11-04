@@ -87,7 +87,9 @@ def get_train_cfg(exp_name, max_iterations):
                 "action_rate",
                 "similar_to_default",
                 "obstacle_avoidance",
-                "forward_progress"
+                "forward_progress",
+                "petting_response",
+                "petting_stability"
             ]
         }
     }
@@ -159,6 +161,12 @@ def get_cfgs():
         'use_height_detection': True,   # Enable pressure detection
         'gentle_press_range': [0.02, 0.08],  # 2-8cm downward pressure
         'gentle_vel_threshold': 0.1,   # Minimum downward velocity
+
+        # ADD THESE PETTING-SPECIFIC ENVIRONMENT SETTINGS:
+        'gesture_duration': 100,        # 2 seconds at 50Hz
+        'cooldown_duration': 250,      # 5 seconds cooldown
+        'petting_obstacle_types': ['cylinder'],  # Simulate person/hand
+        'petting_obstacle_height_range': [0.3, 0.5],  # Human-like height
     }
     obs_cfg = {
         "num_obs": 47,
@@ -335,6 +343,56 @@ def train_with_curriculum(exp_name, num_envs, max_iterations):
     
     return final_checkpoint, results
 
+def evaluate_petting_behavior(runner, env_cfg, obs_cfg, reward_cfg, command_cfg, eval_episodes=10):
+    """Evaluate petting response behavior"""
+    
+    # Create evaluation environment with more petting opportunities
+    eval_env_cfg = env_cfg.copy()
+    eval_env_cfg.update({
+        'obstacle_density': 0.02,  # More obstacles (more petting opportunities)
+        'obstacle_types': ['cylinder'],  # Only cylinders (people)
+        'obstacle_height_range': [0.3, 0.5],  # Human height
+        'clear_radius': 1.5,  # Smaller clear radius (closer interactions)
+    })
+    
+    eval_env = Go2Env(
+        num_envs=32,
+        env_cfg=eval_env_cfg,
+        obs_cfg=obs_cfg,
+        reward_cfg=reward_cfg,
+        command_cfg=command_cfg,
+        show_viewer=False
+    )
+    
+    policy = runner.get_inference_policy(device=gs.device)
+    
+    petting_responses = []
+    gesture_counts = []
+    
+    obs, _ = eval_env.reset()
+    
+    with torch.no_grad():
+        for step in range(1000):  # Longer evaluation for petting
+            actions = policy(obs)
+            obs, rewards, dones, infos = eval_env.step(actions)
+            
+            # Count petting responses
+            if hasattr(eval_env, 'gesture_timer'):
+                active_gestures = (eval_env.gesture_timer > 0).sum().item()
+                gesture_counts.append(active_gestures)
+            
+            # Count petting detections
+            if hasattr(eval_env, 'head_touched'):
+                petting_detections = eval_env.head_touched.sum().item()
+                petting_responses.append(petting_detections)
+    
+    del eval_env
+    
+    return {
+        'avg_gestures_per_step': np.mean(gesture_counts) if gesture_counts else 0,
+        'avg_petting_detections': np.mean(petting_responses) if petting_responses else 0,
+        'total_gesture_activations': sum(gesture_counts),
+    }
 
 def main():
     parser = argparse.ArgumentParser()
@@ -345,6 +403,12 @@ def main():
     parser.add_argument("--params_pkl", type=str, default=None, help="Path to pickle file with optimized parameters")
     parser.add_argument('--curriculum', action='store_true', help='Use curriculum learning approach')
     parser.add_argument('--resume', type=str, default=None, help='Resume training from checkpoint')
+
+    # ADD PETTING-SPECIFIC ARGUMENTS
+    parser.add_argument('--petting_focus', action='store_true', 
+                       help='Focus training on petting behavior')
+    parser.add_argument('--eval_petting', action='store_true',
+                       help='Evaluate petting behavior during training')
     args = parser.parse_args()
 
     try:
@@ -418,6 +482,14 @@ def main():
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
             
+            if args.petting_focus:
+                        print("🐕 Training with petting behavior focus")
+                        # Modify config for petting-focused training
+                        env_cfg['obstacle_density'] = 0.015  # More obstacles for petting
+                        env_cfg['obstacle_types'] = ['cylinder']  # Only people-like obstacles
+                        reward_cfg['reward_scales']['petting_response'] = 2.0  # Higher petting reward
+                        reward_cfg['reward_scales']['tracking_lin_vel'] = 0.3  # Lower locomotion reward
+
             iterations_done = 0
 
             randomize_interval = env_cfg.get('randomize_every_n_episodes', 1500)
