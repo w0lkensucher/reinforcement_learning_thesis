@@ -22,6 +22,7 @@ class Go2BaseEnv:
         self.reward_cfg = reward_cfg
         self.command_cfg = command_cfg
 
+    # Setup functions
     def _setup_robot(self):
         # add robot
         self.base_init_pos = torch.tensor(self.env_cfg["base_init_pos"], device=gs.device)
@@ -61,10 +62,6 @@ class Go2BaseEnv:
         # add normal flat terrain
         self._create_flat_terrain()
 
-    def _create_flat_terrain(self):
-        """Create standard flat terrain"""
-        self.scene.add_entity(gs.morphs.URDF(file="urdf/plane/plane.urdf", fixed=True))
-
     def _setup_robot(self):
         # add robot
         self.base_init_pos = torch.tensor(self.env_cfg["base_init_pos"], device=gs.device)
@@ -84,7 +81,7 @@ class Go2BaseEnv:
                 quat=self.base_init_quat.cpu().numpy(),
             ),
         )
-    
+
     def _setup_buffers(self):
         """Setup common buffers (shared)"""
         self.base_lin_vel = torch.zeros((self.num_envs, 3), device=gs.device, dtype=gs.tc_float)
@@ -118,3 +115,37 @@ class Go2BaseEnv:
         
         self.extras = dict()
         self.extras["observations"] = dict()
+    
+    def _create_flat_terrain(self):
+        """Create standard flat terrain"""
+        self.scene.add_entity(gs.morphs.URDF(file="urdf/plane/plane.urdf", fixed=True))
+    
+    # Locomotion Rewards
+    def _reward_tracking_lin_vel(self):
+        """Track commanded linear velocity - shared across all locomotion tasks"""
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return torch.exp(-lin_vel_error / self.reward_cfg["tracking_sigma"])
+
+    def _reward_tracking_ang_vel(self):
+        """Track commanded angular velocity - shared across all locomotion tasks"""
+        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        return torch.exp(-ang_vel_error / self.reward_cfg["tracking_sigma"])
+    
+    # Stability Rewards (navigation and petting need different stability rewards probably)
+    def _reward_base_height(self):
+        """Maintain proper base height - shared across all tasks"""
+        return torch.square(self.base_pos[:, 2] - self.reward_cfg["base_height_target"])
+    
+    def _reward_lin_vel_z(self):
+        """Penalize vertical velocity (jumping/falling) - shared"""
+        return torch.square(self.base_lin_vel[:, 2])
+    
+    # Smoothness Rewards
+    def _reward_action_rate(self):
+        """Penalize rapid action changes - shared for smooth movement"""
+        return torch.sum(torch.square(self.last_actions - self.actions), dim=1)
+
+    # this is definitly needed in petting too to keep natural posture when not touched
+    def _reward_similar_to_default(self):
+        """Stay close to default pose - shared for natural posture"""
+        return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1)
