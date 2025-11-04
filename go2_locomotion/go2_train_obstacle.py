@@ -150,6 +150,15 @@ def get_cfgs():
         'obstacle_spacing_min': 1.5,             # More spacing between obstacles
         'terrain_size': [25.0, 25.0],           # Larger terrain
         'clear_radius': 3.0,                     # Larger clear area around spawn
+
+        # Enable petting capability
+        'enable_petting': True,
+        'head_touch_radius': 0.2,      # 20cm proximity detection
+        'gentle_speed_threshold': 0.3,  # Must be moving < 0.3 m/s
+        'head_height_offset': 0.25,    # Head 25cm above base
+        'use_height_detection': True,   # Enable pressure detection
+        'gentle_press_range': [0.02, 0.08],  # 2-8cm downward pressure
+        'gentle_vel_threshold': 0.1,   # Minimum downward velocity
     }
     obs_cfg = {
         "num_obs": 47,
@@ -182,7 +191,9 @@ def get_cfgs():
             'jump_reward':0.5,
             "stable_walk": 1.0,
             "straight_walk": 0.5,
-            "forward_movement": 3.0
+            "forward_movement": 3.0,
+            'petting_response': 0.5,    # Reward for responding to petting
+            'petting_stability': 0.2,   # Reward for stability during petting
         },
     }
     command_cfg = {
