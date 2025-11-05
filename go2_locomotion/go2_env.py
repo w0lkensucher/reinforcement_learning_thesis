@@ -428,7 +428,6 @@ class Go2Env:
             material = gs.materials.Rigid(friction=0.8)
             entity = self.scene.add_entity(geom, material=material)
             return entity
-
         except Exception as e:
             print(f"Warning: Failed to create obstacle at ({x:.2f}, {y:.2f}): {e}")
 

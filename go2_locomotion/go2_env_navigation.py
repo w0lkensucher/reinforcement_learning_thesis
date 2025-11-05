@@ -8,19 +8,27 @@ class Go2NavigationEnv(Go2BaseEnv):
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, wind_force=False, uneven_terrain=False):
         super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
         
+        self.wind_force = wind_force
+        self.uneven_terrain = uneven_terrain
+        self.obstacle_entities = []
+        self.obstacle_positions = []
+
+        self.terrain_entities = []
+        self.terrain_height_map = None
+
         # Additional initialization for navigation-specific features can go here
         if uneven_terrain:
             self._create_uneven_terrain()
 
-        # add wind force field; make it conditional later if needed
+        # add wind force field; change shape and direction?
         if wind_force:
             ff = gs.force_fields.Wind(direction=(1, 0, 0), strength=5.0, radius=10.0, center=(0, 0, 0))
             self.scene.add_force_field(ff)
 
+        self._setup_robot()
+        
 
-    # Navigation-specific methods can be added here
-
-    
+    # Terrain Creation
     def _create_uneven_terrain(self):
         """Create uneven terrain with various surface types"""
         terrain_type = self.env_cfg.get('terrain_type', 'heightmap')
@@ -37,6 +45,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         else:
             print(f"Unknown terrain type: {terrain_type}, using flat terrain")
             self._create_flat_terrain()
+
 
     def _create_heightmap_terrain(self, terrain_size):
         """Create terrain from height map (hills and valleys)"""
@@ -97,6 +106,7 @@ class Go2NavigationEnv(Go2BaseEnv):
             print("Falling back to flat terrain")
             self._create_flat_terrain()
 
+
     def _create_slope_terrain(self, terrain_size):
         """Create terrain with slopes and ramps"""
         num_slopes = self.env_cfg.get('num_slopes', 5)
@@ -133,6 +143,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         # Add base plane
         self._create_flat_terrain()
         print(f"Created {num_slopes} slope terrain features")
+
 
     def _create_stairs_terrain(self, terrain_size):
         """Create terrain with stairs and steps"""
@@ -176,6 +187,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         self._create_flat_terrain()
         print(f"Created {num_staircases} staircases with {steps_per_staircase} steps each")
 
+
     def _create_random_box_terrain(self, terrain_size):
         """Create terrain with random scattered boxes (rocks/debris)"""
         num_boxes = self.env_cfg.get('num_terrain_boxes', 20)
@@ -212,6 +224,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         self._create_flat_terrain()
         print(f"Created {num_boxes} random terrain boxes")
 
+
     def _get_terrain_height_at_position(self, x, y):
         """Get terrain height at specific position (for terrain-aware rewards)"""
         if self.terrain_height_map is None:
@@ -230,3 +243,93 @@ class Go2NavigationEnv(Go2BaseEnv):
             return float(self.terrain_height_map[y_idx, x_idx])
         
         return 0.0
+    
+
+    # obstacle creation
+    def _create_obstacles(self):
+        """Create obstacles in the environment"""
+        try:
+            terrain_size = self.env_cfg['terrain_size']
+            density = self.env_cfg['obstacle_density']
+            clear_radius = self.env_cfg['clear_radius']
+
+            area = terrain_size[0] * terrain_size[1]
+            num_obstacles = int(area * density)
+            
+            print(f"Creating {num_obstacles} obstacles...")
+
+            self.obstacle_positions = []
+            self.obstacle_entities = []
+
+            for i in range(num_obstacles):
+                attempts = 0
+                while attempts < 50:
+                    x = np.random.uniform(-terrain_size[0]/2, terrain_size[0]/2)
+                    y = np.random.uniform(-terrain_size[1]/2, terrain_size[1]/2)
+                    height = np.random.uniform(*self.env_cfg['obstacle_height_range'])
+
+                    robot_spawn = self.env_cfg['base_init_pos'][:2]
+                    dist_to_spawn = np.sqrt((x - robot_spawn[0])**2 + (y - robot_spawn[1])**2)
+                    if dist_to_spawn < clear_radius:
+                        attempts += 1
+                        continue
+
+                    too_close = False
+                    for pos in self.obstacle_positions:
+                        dist = np.sqrt((x - pos[0])**2 + (y - pos[1])**2)
+                        if dist < self.env_cfg['obstacle_spacing_min']:
+                            too_close = True
+                            break
+
+                    if not too_close:
+                        self.obstacle_positions.append([x, y, height])
+                        entity = self._add_single_obstacle(x, y, height)
+                        if entity is not None:    
+                            self.obstacle_entities.append(entity)
+                        break
+
+                    attempts += 1
+
+            print(f"Successfully created {len(self.obstacle_positions)} obstacles")
+        except Exception as e:
+            print(f"Warning: Failed to create obstacles: {e}")
+            print("Continuing without obstacles...")
+
+
+    def _add_single_obstacle(self, x, y, height):
+        """Add a single obstacle at position (x, y)"""
+        try:
+            obstacle_type = np.random.choice(self.env_cfg['obstacle_types'])
+            width = np.random.uniform(*self.env_cfg['obstacle_width_range'])
+
+            if obstacle_type == 'box':
+                geom = gs.morphs.Box(
+                    pos=(x, y, height / 2),
+                    size=(width, width, height)
+                )
+            elif obstacle_type == 'cylinder':
+                geom = gs.morphs.Cylinder(
+                    pos=(x, y, height / 2),
+                    radius=width/2,
+                    height=height
+                )
+
+            # Material is passed to add_entity, not to the morph
+            material = gs.materials.Rigid(friction=0.8)
+            entity = self.scene.add_entity(geom, material=material)
+            return entity
+        except Exception as e:
+            print(f"Warning: Failed to create obstacle at ({x:.2f}, {y:.2f}): {e}")
+
+
+    # Locomotion Rewards
+    def _reward_tracking_lin_vel(self):
+        """Track commanded linear velocity - shared across all locomotion tasks"""
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return torch.exp(-lin_vel_error / self.reward_cfg["tracking_sigma"])
+
+
+    def _reward_tracking_ang_vel(self):
+        """Track commanded angular velocity - shared across all locomotion tasks"""
+        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        return torch.exp(-ang_vel_error / self.reward_cfg["tracking_sigma"])

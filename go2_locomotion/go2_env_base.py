@@ -4,6 +4,12 @@ import genesis as gs
 import numpy as np
 from genesis.utils.geom import quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
 
+
+# Utility functions
+def gs_rand_float(lower, upper, shape, device):
+    return (upper - lower) * torch.rand(size=shape, device=device) + lower
+
+
 class Go2BaseEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg):
         self.num_envs = num_envs
@@ -22,6 +28,21 @@ class Go2BaseEnv:
         self.reward_cfg = reward_cfg
         self.command_cfg = command_cfg
 
+        self.obs_scales = obs_cfg["obs_scales"]
+        self.reward_scales = reward_cfg["reward_scales"]
+
+        self.episode_sums = dict()
+        for name in self.reward_scales.keys():
+            self.episode_sums[name] = torch.zeros((self.num_envs,), device=gs.device, dtype=gs.tc_float)
+
+        self.episode_sums['reward'] = torch.zeros((self.num_envs,), device=gs.device, dtype=gs.tc_float)
+
+    def _resample_commands(self, envs_idx):
+        self.commands[envs_idx, 0] = gs_rand_float(*self.command_cfg["lin_vel_x_range"], (len(envs_idx),), gs.device)
+        self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["lin_vel_y_range"], (len(envs_idx),), gs.device)
+        self.commands[envs_idx, 2] = gs_rand_float(*self.command_cfg["ang_vel_range"], (len(envs_idx),), gs.device)
+
+
     # Setup functions
     def _setup_robot(self):
         # add robot
@@ -37,7 +58,8 @@ class Go2BaseEnv:
             ),
         )
 
-    def _setup_scene(self):
+
+    def _setup_scene(self, show_viewer=False):
         # create scene
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.dt, substeps=2),
@@ -46,6 +68,7 @@ class Go2BaseEnv:
                 camera_pos=(2.0, 0.0, 2.5),
                 camera_lookat=(0.0, 0.0, 0.5),
                 camera_fov=40,
+                show_viewer=show_viewer,
             ),
             vis_options=gs.options.VisOptions(rendered_envs_idx=list(range(1))),
             rigid_options=gs.options.RigidOptions(
@@ -58,29 +81,9 @@ class Go2BaseEnv:
                 max_collision_pairs=30,
             )
         )
-
-        # add normal flat terrain
+        # add normal flat terrain (can be overridden)
         self._create_flat_terrain()
 
-    def _setup_robot(self):
-        # add robot
-        self.base_init_pos = torch.tensor(self.env_cfg["base_init_pos"], device=gs.device)
-        self.base_init_quat = torch.tensor(self.env_cfg["base_init_quat"], device=gs.device)
-        self.inv_base_init_quat = inv_quat(self.base_init_quat)
-
-        # Adjust robot spawn height for uneven terrain
-        if self.uneven_terrain:
-            spawn_x, spawn_y = self.base_init_pos[0].item(), self.base_init_pos[1].item()
-            terrain_height = self._get_terrain_height_at_position(spawn_x, spawn_y)
-            self.base_init_pos[2] = terrain_height + 0.42  # 42cm above terrain
-
-        self.robot = self.scene.add_entity(
-            gs.morphs.URDF(
-                file="urdf/go2/urdf/go2.urdf",
-                pos=self.base_init_pos.cpu().numpy(),
-                quat=self.base_init_quat.cpu().numpy(),
-            ),
-        )
 
     def _setup_buffers(self):
         """Setup common buffers (shared)"""
@@ -115,37 +118,156 @@ class Go2BaseEnv:
         
         self.extras = dict()
         self.extras["observations"] = dict()
+
     
     def _create_flat_terrain(self):
         """Create standard flat terrain"""
         self.scene.add_entity(gs.morphs.URDF(file="urdf/plane/plane.urdf", fixed=True))
-    
-    # Locomotion Rewards
-    def _reward_tracking_lin_vel(self):
-        """Track commanded linear velocity - shared across all locomotion tasks"""
-        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
-        return torch.exp(-lin_vel_error / self.reward_cfg["tracking_sigma"])
 
-    def _reward_tracking_ang_vel(self):
-        """Track commanded angular velocity - shared across all locomotion tasks"""
-        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
-        return torch.exp(-ang_vel_error / self.reward_cfg["tracking_sigma"])
+
+    def _build_scene_and_setup(self):
+        self.scene.build(n_envs=self.num_envs)
+
+        # names to indices
+        self.motors_dof_idx = [self.robot.get_joint(name).dof_start for name in self.env_cfg["joint_names"]]
+        
+        # PD control parameters
+        self.robot.set_dofs_kp([self.env_cfg["kp"]] * self.num_actions, self.motors_dof_idx)
+        self.robot.set_dofs_kv([self.env_cfg["kd"]] * self.num_actions, self.motors_dof_idx)
+
+        self.reward_functions = dict()
+        for name in self.reward_scales.keys():
+            self.reward_scales[name] *= self.dt
+            if hasattr(self, f"_reward_{name}"):
+                self.reward_functions[name] = getattr(self, f"_reward_{name}")
+
+    # Update, Observation and Execution functions
+    def _update_robot_state(self):
+        self.episode_length_buf += 1
+        self.base_pos[:] = self.robot.get_pos()
+        self.base_quat[:] = self.robot.get_quat()
+        self.base_euler = quat_to_xyz(
+            transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat),
+            rpy=True,
+            degrees=True,
+        )
+        inv_base_quat = inv_quat(self.base_quat)
+        self.base_lin_vel[:] = transform_by_quat(self.robot.get_vel(), inv_base_quat)
+        self.base_ang_vel[:] = transform_by_quat(self.robot.get_ang(), inv_base_quat)
+        self.projected_gravity = transform_by_quat(self.global_gravity, inv_base_quat)
+        self.dof_pos[:] = self.robot.get_dofs_position(self.motors_dof_idx)
+        self.dof_vel[:] = self.robot.get_dofs_velocity(self.motors_dof_idx)
+
+
+    def _check_termination(self):
+        self.reset_buf = self.episode_length_buf > self.max_episode_length
+        self.reset_buf |= torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"]
+        self.reset_buf |= torch.abs(self.base_euler[:, 0]) > self.env_cfg["termination_if_roll_greater_than"]
+
+        time_out_idx = (self.episode_length_buf > self.max_episode_length).nonzero(as_tuple=False).reshape((-1,))
+        self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=gs.device, dtype=gs.tc_float)
+        self.extras["time_outs"][time_out_idx] = 1.0
+
+    def _execute_actions(self, actions):
+        """Execute actions - same for all environments"""
+        self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
+        exec_actions = self.last_actions if self.simulate_action_latency else self.actions
+        target_dof_pos = exec_actions * self.env_cfg["action_scale"] + self.default_dof_pos
+        self.robot.control_dofs_position(target_dof_pos, self.motors_dof_idx)
+        self.scene.step()
     
+        # prepare reward functions and multiply reward scales by dt
+        self.reward_functions = dict()
+        for name in self.reward_scales.keys():
+            self.reward_scales[name] *= self.dt
+            self.reward_functions[name] = getattr(self, "_reward_" + name)
+
+
+    def reset_idx(self, envs_idx):
+        if len(envs_idx) == 0:
+            return
+
+        # reset dofs
+        self.dof_pos[envs_idx] = self.default_dof_pos
+        self.dof_vel[envs_idx] = 0.0
+        self.robot.set_dofs_position(
+            position=self.dof_pos[envs_idx],
+            dofs_idx_local=self.motors_dof_idx,
+            zero_velocity=True,
+            envs_idx=envs_idx,
+        )
+
+        # reset base
+        self.base_pos[envs_idx] = self.base_init_pos
+        self.base_quat[envs_idx] = self.base_init_quat.reshape(1, -1)
+        self.robot.set_pos(self.base_pos[envs_idx], zero_velocity=False, envs_idx=envs_idx)
+        self.robot.set_quat(self.base_quat[envs_idx], zero_velocity=False, envs_idx=envs_idx)
+        self.base_lin_vel[envs_idx] = 0
+        self.base_ang_vel[envs_idx] = 0
+        self.robot.zero_all_dofs_velocity(envs_idx)
+
+        # reset buffers
+        self.last_actions[envs_idx] = 0.0
+        self.last_dof_vel[envs_idx] = 0.0
+        self.episode_length_buf[envs_idx] = 0
+        self.reset_buf[envs_idx] = True
+
+        # fill extras
+        self.extras["episode"] = {}
+        for key in self.episode_sums.keys():
+            self.extras["episode"]["rew_" + key] = (
+                torch.mean(self.episode_sums[key][envs_idx]).item() / self.env_cfg["episode_length_s"]
+            )
+            self.episode_sums[key][envs_idx] = 0.0
+
+        self._resample_commands(envs_idx)
+
+
+    def reset(self):
+        self.reset_buf[:] = True
+        self.reset_idx(torch.arange(self.num_envs, device=gs.device))
+        return self.obs_buf, None
+    
+
     # Stability Rewards (navigation and petting need different stability rewards probably)
     def _reward_base_height(self):
         """Maintain proper base height - shared across all tasks"""
         return torch.square(self.base_pos[:, 2] - self.reward_cfg["base_height_target"])
     
+
     def _reward_lin_vel_z(self):
         """Penalize vertical velocity (jumping/falling) - shared"""
         return torch.square(self.base_lin_vel[:, 2])
     
+
     # Smoothness Rewards
     def _reward_action_rate(self):
         """Penalize rapid action changes - shared for smooth movement"""
         return torch.sum(torch.square(self.last_actions - self.actions), dim=1)
 
+
     # this is definitly needed in petting too to keep natural posture when not touched
     def _reward_similar_to_default(self):
         """Stay close to default pose - shared for natural posture"""
         return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1)
+    
+
+    # abstract methods
+    def step(self, actions):
+        raise NotImplementedError
+    
+
+    def _compute_observations(self):
+        raise NotImplementedError
+    
+    
+    def _compute_rewards(self):
+        raise NotImplementedError
+    
+
+    def get_observations(self):
+        raise NotImplementedError
+    
+
+    def privileged_observations(self):
+        raise NotImplementedError
