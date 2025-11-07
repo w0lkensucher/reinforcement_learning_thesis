@@ -1,7 +1,6 @@
 import torch
 import math
 import genesis as gs
-import numpy as np
 from genesis.utils.geom import quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
 
 

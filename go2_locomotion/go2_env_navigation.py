@@ -1,5 +1,4 @@
 import torch
-import math
 import genesis as gs
 import numpy as np
 from go2_env_base import Go2BaseEnv
@@ -429,7 +428,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         high_obs.unsqueeze(1),  # 1: signal for high obstacle
     ], axis=-1)
         
-        
+
     def get_observations(self):
         """Get navigation observations"""
         self.extras["observations"]["critic"] = self.obs_buf
