@@ -5,7 +5,7 @@ import numpy as np
 from go2_env_base import Go2BaseEnv
 
 class Go2NavigationEnv(Go2BaseEnv):
-    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, wind_force=False, uneven_terrain=False):
+    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, wind_force=False, uneven_terrain=False):
         super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
         
         self.wind_force = wind_force
@@ -15,6 +15,8 @@ class Go2NavigationEnv(Go2BaseEnv):
 
         self.terrain_entities = []
         self.terrain_height_map = None
+
+        self._setup_scene(show_viewer)
 
         # Additional initialization for navigation-specific features can go here
         if uneven_terrain:
@@ -26,7 +28,90 @@ class Go2NavigationEnv(Go2BaseEnv):
             self.scene.add_force_field(ff)
 
         self._setup_robot()
+        self._create_obstacles()
+        self._setup_buffers()
+        self._build_scene_and_setup()
         
+
+    # Setup extensions
+    def _setup_robot(self):
+        """Setup robot with navigation-specific extensions"""
+        super()._setup_robot()
+        # Additional robot setup for navigation can go here
+        if self.uneven_terrain:
+            spawn_x, spawn_y = self.base_init_pos[0].item(), self.base_init_pos[1].item()
+            terrain_height = self._get_terrain_height_at_position(spawn_x, spawn_y)
+            self.base_init_pos[2] = terrain_height + 0.42  # Adjust spawn height based on terrain
+
+            self.robot.set_pos(self.base_init_pos.cpu().numpy())
+
+
+    def _randomize_obstacles_positions(self):
+        """Move existing obstacles to new random positions"""
+        try:
+            if len(self.obstacle_entities) == 0:
+                return
+                
+            terrain_size = self.env_cfg['terrain_size']
+            clear_radius = self.env_cfg['clear_radius']
+            robot_spawn = self.env_cfg['base_init_pos'][:2]
+            
+            print(f"Randomizing positions of {len(self.obstacle_entities)} obstacles...")
+            
+            new_positions = []
+            
+            for i, entity in enumerate(self.obstacle_entities):
+                attempts = 0
+                while attempts < 50:
+                    # Generate new random position
+                    x = np.random.uniform(-terrain_size[0]/2, terrain_size[0]/2)
+                    y = np.random.uniform(-terrain_size[1]/2, terrain_size[1]/2)
+                    
+                    # Check distance from robot spawn
+                    dist_to_spawn = np.sqrt((x - robot_spawn[0])**2 + (y - robot_spawn[1])**2)
+                    if dist_to_spawn < clear_radius:
+                        attempts += 1
+                        continue
+                    
+                    # Check distance from other obstacles
+                    too_close = False
+                    for pos in new_positions:
+                        dist = np.sqrt((x - pos[0])**2 + (y - pos[1])**2)
+                        if dist < self.env_cfg['obstacle_spacing_min']:
+                            too_close = True
+                            break
+                    
+                    if not too_close:
+                        # Randomize height too
+                        height = np.random.uniform(*self.env_cfg['obstacle_height_range'])
+                        
+                        # Move obstacle to new position
+                        new_pos = torch.tensor([x, y, height/2], device=self.device)
+                        entity.set_pos(
+                            new_pos.unsqueeze(0).repeat(self.num_envs, 1),
+                            envs_idx=torch.arange(self.num_envs, device=self.device)
+                        )
+                        
+                        new_positions.append([x, y, height])
+                        break
+                        
+                    attempts += 1
+                
+                # If couldn't find good position, move far away
+                if attempts >= 50:
+                    far_away = torch.tensor([1000.0, 1000.0, -100.0], device=self.device)
+                    entity.set_pos(
+                        far_away.unsqueeze(0).repeat(self.num_envs, 1),
+                        envs_idx=torch.arange(self.num_envs, device=self.device)
+                    )
+            
+            # Update tracking
+            self.obstacle_positions = new_positions
+            print(f"Successfully randomized {len(new_positions)} obstacle positions")
+
+        except Exception as e:
+            print(f"Warning: Failed to move obstacles: {e}")
+
 
     # Terrain Creation
     def _create_uneven_terrain(self):
@@ -261,7 +346,7 @@ class Go2NavigationEnv(Go2BaseEnv):
             self.obstacle_positions = []
             self.obstacle_entities = []
 
-            for i in range(num_obstacles):
+            for _ in range(num_obstacles):
                 attempts = 0
                 while attempts < 50:
                     x = np.random.uniform(-terrain_size[0]/2, terrain_size[0]/2)
@@ -282,7 +367,13 @@ class Go2NavigationEnv(Go2BaseEnv):
                             break
 
                     if not too_close:
-                        self.obstacle_positions.append([x, y, height])
+                        jump_threshold = self.reward_cfg.get('jump_height_threshold', 0.08)
+                        if height < jump_threshold:
+                            obstacle_type = 'low'
+                        else:
+                            obstacle_type = 'high'
+
+                        self.obstacle_positions.append([x, y, height, obstacle_type])
                         entity = self._add_single_obstacle(x, y, height)
                         if entity is not None:    
                             self.obstacle_entities.append(entity)
@@ -322,6 +413,75 @@ class Go2NavigationEnv(Go2BaseEnv):
             print(f"Warning: Failed to create obstacle at ({x:.2f}, {y:.2f}): {e}")
 
 
+    # Observation Helpers
+    def _compute_observations(self):
+        """Compute observations including navigation-specific data"""
+        low_obs, high_obs, _, _ = self._detect_nearby_obstacles()
+
+        self.obs_buf = torch.cat([
+        self.base_ang_vel * self.obs_scales["ang_vel"],  # 3
+        self.projected_gravity,  # 3
+        self.commands * self.commands_scale,  # 3
+        (self.dof_pos - self.default_dof_pos) * self.obs_scales["dof_pos"],  # 12
+        self.dof_vel * self.obs_scales["dof_vel"],  # 12
+        self.actions,  # 12
+        low_obs.unsqueeze(1),   # 1: signal for low obstacle
+        high_obs.unsqueeze(1),  # 1: signal for high obstacle
+    ], axis=-1)
+        
+        
+    def get_observations(self):
+        """Get navigation observations"""
+        self.extras["observations"]["critic"] = self.obs_buf
+        return self.obs_buf, self.extras
+
+
+    def _detect_nearby_obstacles(self):
+        """Detect obstacles near the robot and classify as jumpable or avoidable"""
+        if not self.env_cfg.get('use_obstacles', False) or len(self.obstacle_positions) == 0:
+            return torch.zeros(self.num_envs, device=self.device), torch.zeros(self.num_envs, device=self.device)
+        
+        robot_pos = self.base_pos[:, :2]  # x, y position
+        detection_radius = 1.5  # Distance ahead to look for obstacles
+        
+        # For each environment, find nearest obstacle ahead
+        nearest_low_signal = torch.zeros(self.num_envs, device=self.device)
+        nearest_high_signal = torch.zeros(self.num_envs, device=self.device)
+        closest_low_distance = torch.full((self.num_envs,), float('inf'), device=self.device)
+        closest_high_distance = torch.full((self.num_envs,), float('inf'), device=self.device)
+
+        # Get robot's forward direction
+        robot_heading = self.base_radians[:, 2]  # Yaw angle
+        forward_dir = torch.stack([torch.cos(robot_heading), torch.sin(robot_heading)], dim=1)
+        
+        for obs_data in self.obstacle_positions:
+            obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)  # x, y
+            obs_type = obs_data[3] if len(obs_data) > 3 else 'high'  # type or default
+
+            # Vector from robot to obstacle
+            to_obstacle = obs_pos.unsqueeze(0) - robot_pos  # Shape: (num_envs, 2)
+            distance = torch.norm(to_obstacle, dim=1)
+
+            # Check if obstacle is ahead (dot product with forward direction)
+            is_ahead = torch.sum(to_obstacle * forward_dir, dim=1) > 0
+            is_close = (distance < detection_radius) & is_ahead
+            
+            obstacle_signal = 1.0 / (distance + 0.1)
+            # Classify obstacle by height
+            if obs_type == 'low':
+                # Low obstacle - should jump over
+                update_mask = is_close & (distance < closest_low_distance)
+                nearest_low_signal = torch.where(update_mask, obstacle_signal, nearest_low_signal)
+                closest_low_distance = torch.where(update_mask, distance, closest_low_distance)
+            else:  # obs_type == 'high'
+                # High obstacle - should go around
+                update_mask = is_close & (distance < closest_high_distance)
+                nearest_high_signal = torch.where(update_mask, obstacle_signal, nearest_high_signal)
+                closest_high_distance = torch.where(update_mask, distance, closest_high_distance)
+        
+        return nearest_low_signal, nearest_high_signal, closest_low_distance, closest_high_distance
+
+
     # Locomotion Rewards
     def _reward_tracking_lin_vel(self):
         """Track commanded linear velocity - shared across all locomotion tasks"""
@@ -333,3 +493,295 @@ class Go2NavigationEnv(Go2BaseEnv):
         """Track commanded angular velocity - shared across all locomotion tasks"""
         ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
         return torch.exp(-ang_vel_error / self.reward_cfg["tracking_sigma"])
+    
+
+    def _reward_forward_movement(self):
+        """Heavily reward forward movement, penalize standing still"""
+        forward_vel = self.base_lin_vel[:, 0]
+        
+        # Heavy penalty for standing still
+        standing_penalty = torch.where(forward_vel < 0.1, -2.0, 0.0)
+        
+        # Reward forward movement
+        forward_reward = torch.clamp(forward_vel, 0, 2.0)  # Cap at 2 m/s
+        
+        return forward_reward + standing_penalty
+    
+
+    def _reward_straight_walk_when_clear(self):
+        """Reward walking straight when no obstacles are nearby"""
+        _, _, low_dist, high_dist = self._detect_nearby_obstacles()
+        
+        # Find closest obstacle of any type
+        closest_distance = torch.min(low_dist, high_dist)
+        
+        # Distance-based straight walking encouragement
+        safe_distance = 2.0      # Full straight walking reward beyond this
+        warning_distance = 1.0   # Start reducing reward below this
+        danger_distance = 0.5    # No straight walking reward below this
+
+        # Calculate straight walking factor (0 to 1)
+        straight_factor = torch.where(
+            closest_distance >= safe_distance,
+            1.0,  # Full reward when safe
+            torch.where(
+                closest_distance >= warning_distance,
+                (closest_distance - warning_distance) / (safe_distance - warning_distance),  # Linear scaling
+                torch.where(
+                    closest_distance >= danger_distance,
+                    0.1,  # Small reward in warning zone
+                    0.0   # No reward in danger zone
+                )
+            )
+        )
+        
+        # Reward components
+        lateral_velocity = torch.abs(self.base_lin_vel[:, 1])
+        angular_velocity = torch.abs(self.base_ang_vel[:, 2])
+        forward_velocity = torch.clamp(self.base_lin_vel[:, 0], 0, 2.0)
+        
+        # Apply distance-based scaling
+        straight_reward = (
+            forward_velocity * 0.5 * straight_factor -      # Reward forward movement when safe
+            lateral_velocity * 2.0 * straight_factor -      # Penalize lateral movement when safe  
+            angular_velocity * 1.5 * straight_factor        # Penalize turning when safe
+        )
+        
+        return straight_reward
+
+    def _reward_adaptive_base_height(self):
+        """Maintain appropriate base height with terrain and obstacle awareness"""
+        base_height = self.base_pos[:, 2]
+        
+        if self.uneven_terrain:
+            # Adaptive height based on local terrain
+            target_heights = []
+            for env_idx in range(self.num_envs):
+                robot_x = self.base_pos[env_idx, 0].item()
+                robot_y = self.base_pos[env_idx, 1].item()
+                terrain_height = self._get_terrain_height_at_position(robot_x, robot_y)
+                target_heights.append(terrain_height + 0.42)  # 42cm above terrain
+            target_height = torch.tensor(target_heights, device=self.device)
+        else:
+            # Fixed height for flat terrain
+            target_height = self.reward_cfg["base_height_target"]
+        
+        # Base height error
+        height_error = torch.abs(base_height - target_height)
+        
+        # Allow more height variation during jumping over low obstacles
+        low_obs, _ = self._detect_nearby_obstacles()[:2]
+        
+        # More lenient height control when jumping
+        is_jumping = (self.base_lin_vel[:, 2] > 0.1) & (low_obs > 0.1)
+        tolerance = torch.where(is_jumping, 0.3, 0.1)  # 30cm tolerance when jumping, 10cm normally
+        
+        # Scaled penalty - less penalty within tolerance
+        height_penalty = torch.where(height_error < tolerance, 
+                                    height_error * 0.5,  # Gentle penalty within tolerance
+                                    height_error * 2.0)  # Stronger penalty outside tolerance
+        
+        return -height_penalty
+    
+
+    def _reward_landing_stability(self):
+        """Landing stability reward"""
+        # Detect when robot is airborne or recently landed
+        normal_height = None
+        
+        if self.uneven_terrain:
+            # Get terrain-aware normal height for each environment
+            normal_heights = []
+            for env_idx in range(self.num_envs):
+                robot_x = self.base_pos[env_idx, 0].item()
+                robot_y = self.base_pos[env_idx, 1].item()
+                terrain_height = self._get_terrain_height_at_position(robot_x, robot_y)
+                normal_heights.append(terrain_height + 0.42)
+            normal_height = torch.tensor(normal_heights, device=self.device)
+        else:
+            normal_height = 0.42
+        
+        current_height = self.base_pos[:, 2]
+        vertical_velocity = self.base_lin_vel[:, 2]
+        
+        # Simple landing detection: above normal height with downward velocity
+        is_landing = (current_height > normal_height + 0.05) & (vertical_velocity < 0)
+        
+        # Reward low angular velocity during landing
+        ang_vel_penalty = torch.norm(self.base_ang_vel, dim=1)
+        stability_reward = torch.exp(-ang_vel_penalty)
+        
+        return torch.where(is_landing, stability_reward * 0.3, torch.zeros_like(current_height))
+
+
+    def _reward_jumping_behavior(self):
+        """Reward for appropriate jumping over low obstacles"""
+        if len(self.obstacle_positions) == 0:
+            return torch.zeros(self.num_envs, device=self.device)
+        
+        robot_pos = self.base_pos
+        jumping_reward = torch.zeros(self.num_envs, device=self.device)
+        
+        # Check if robot is airborne (z-velocity > 0 and z-position > normal)
+        is_jumping = (self.base_lin_vel[:, 2] > 0.1) & (robot_pos[:, 2] > 0.5)
+        
+        if is_jumping.any():
+            # Check if there's a low obstacle nearby that justifies jumping
+            for obs_data in self.obstacle_positions:
+                if obs_data[3] == 'low':  # Only for low obstacles
+                    obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+                    
+                    to_obstacle = obs_pos.unsqueeze(0) - robot_pos[:, :2]
+                    distance = torch.norm(to_obstacle, dim=1)
+                    
+                    # Reward jumping over low obstacles
+                    near_low_obstacle = distance < 1.0
+                    jumping_reward += torch.where(is_jumping & near_low_obstacle, 2.0, 0.0)
+        
+        return jumping_reward
+
+
+    def _reward_orientation_stability(self):
+        """Penalize excessive roll and pitch to prevent falling"""
+        # Use radians for calculation
+        roll = torch.abs(self.base_radians[:, 0])    # Roll angle
+        pitch = torch.abs(self.base_radians[:, 1])   # Pitch angle
+        
+        # Get termination thresholds (need to convert from degrees to radians)
+        max_roll = self.env_cfg["termination_if_roll_greater_than"] * torch.pi / 180.0
+        max_pitch = self.env_cfg["termination_if_pitch_greater_than"] * torch.pi / 180.0
+        
+        # Progressive penalty as robot approaches falling
+        roll_penalty = torch.where(roll > max_roll * 0.5,  # Start penalty at 50% of termination threshold
+                                -(roll / max_roll) * 5.0,  # Scale penalty by how close to falling
+                                torch.zeros_like(roll))
+        
+        pitch_penalty = torch.where(pitch > max_pitch * 0.5,
+                                -(pitch / max_pitch) * 5.0,
+                                torch.zeros_like(pitch))
+        
+        return roll_penalty + pitch_penalty
+
+
+    def _reward_angular_velocity_stability(self):
+        """Penalize excessive angular velocities that lead to falling"""
+        # Penalize high angular velocities in roll and pitch
+        roll_vel = torch.abs(self.base_ang_vel[:, 0])
+        pitch_vel = torch.abs(self.base_ang_vel[:, 1])
+        
+        # Moderate angular velocity is OK, but excessive is dangerous
+        max_safe_ang_vel = 2.0  # rad/s
+        
+        roll_vel_penalty = torch.where(roll_vel > max_safe_ang_vel,
+                                    -torch.square(roll_vel - max_safe_ang_vel),
+                                    torch.zeros_like(roll_vel))
+        
+        pitch_vel_penalty = torch.where(pitch_vel > max_safe_ang_vel,
+                                    -torch.square(pitch_vel - max_safe_ang_vel),
+                                    torch.zeros_like(pitch_vel))
+        
+        return roll_vel_penalty + pitch_vel_penalty
+
+
+    def _reward_upright_posture(self):
+        """Small reward for maintaining upright posture"""
+        # Small positive reward for maintaining good orientation
+        roll = torch.abs(self.base_radians[:, 0])
+        pitch = torch.abs(self.base_radians[:, 1])
+        
+        # Convert termination thresholds to radians
+        max_roll = self.env_cfg["termination_if_roll_greater_than"] * torch.pi / 180.0
+        max_pitch = self.env_cfg["termination_if_pitch_greater_than"] * torch.pi / 180.0
+        
+        # Exponential reward for staying upright
+        roll_reward = torch.exp(-roll * 3.0 / max_roll)
+        pitch_reward = torch.exp(-pitch * 3.0 / max_pitch)
+        
+        return (roll_reward + pitch_reward) * 0.1  # Small positive reward
+
+
+    # Navigation Rewards
+    def _reward_ground_clearance(self):
+        """Ensure minimum ground clearance for safe navigation"""
+        min_clearance = 0.25  # 25cm minimum
+        current_height = self.base_pos[:, 2]
+        clearance_violation = torch.clamp(min_clearance - current_height, min=0)
+        return -clearance_violation * 10.0  # Strong penalty for dragging
+    
+
+    def _reward_obstacle_avoidance(self):
+        """Reward for proper obstacle handling"""
+        if len(self.obstacle_positions) == 0:
+            return torch.zeros(self.num_envs, device=self.device)
+        
+        robot_pos = self.base_pos[:, :2]
+        collision_penalty = torch.zeros(self.num_envs, device=self.device)
+        
+        for obs_data in self.obstacle_positions:
+            obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+            obs_type = obs_data[3]
+            
+            # Distance to obstacle
+            to_obstacle = obs_pos.unsqueeze(0) - robot_pos
+            distance = torch.norm(to_obstacle, dim=1)
+            
+            # Different safety margins for different obstacle types
+            if obs_type == 'low':
+                safety_margin = 0.3  # Can get closer to low obstacles (jump over)
+                collision_threshold = 0.1
+            else:  # 'high'
+                safety_margin = 0.8  # Must maintain distance from high obstacles
+                collision_threshold = 0.3
+            
+            # Penalties based on obstacle type
+            collision_mask = distance < collision_threshold
+            close_mask = (distance < safety_margin) & ~collision_mask
+            
+            # Severe penalty for collision
+            collision_penalty += torch.where(collision_mask, -10.0, 0.0)
+            
+            # Moderate penalty for being too close
+            collision_penalty += torch.where(close_mask, -2.0, 0.0)
+        
+        return collision_penalty
+    
+    
+    # Computation Helpers
+    def _compute_rewards(self):
+        """Navigation-specific reward computation"""
+        self.rew_buf[:] = 0.0
+        for name, reward_func in self.reward_functions.items():
+            rew = reward_func() * self.reward_scales[name]
+            self.rew_buf += rew
+            self.episode_sums[name] += rew
+        self.episode_sums['reward'] += self.rew_buf
+
+    def step(self, actions):
+        """Navigation-specific step logic"""
+        self._execute_actions(actions)
+
+        self._update_robot_state()
+
+        envs_idx = (
+            (self.episode_length_buf % int(self.env_cfg["resampling_time_s"] / self.dt) == 0)
+            .nonzero(as_tuple=False)
+            .reshape((-1,))
+        )
+        self._resample_commands(envs_idx)
+
+        self._check_termination()
+
+        self.reset_idx(self.reset_buf.nonzero(as_tuple=False).reshape(-1))
+
+        self._compute_rewards()
+
+        self._compute_observations()
+
+        self.last_actions[:] = actions
+        self.last_dof_vel[:] = self.dof_vel
+
+        time_out_idx = (self.episode_length_buf > self.max_episode_length).nonzero(as_tuple=False).reshape((-1,))
+        self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=self.device, dtype=torch.float)
+        self.extras["time_outs"][time_out_idx] = 1.0
+
+        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras

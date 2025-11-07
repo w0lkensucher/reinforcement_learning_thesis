@@ -118,6 +118,7 @@ class Go2BaseEnv:
         
         self.extras = dict()
         self.extras["observations"] = dict()
+        self.extras["time_outs"] = torch.zeros((self.num_envs,), device=gs.device, dtype=gs.tc_float)
 
     
     def _create_flat_terrain(self):
@@ -146,11 +147,11 @@ class Go2BaseEnv:
         self.episode_length_buf += 1
         self.base_pos[:] = self.robot.get_pos()
         self.base_quat[:] = self.robot.get_quat()
-        self.base_euler = quat_to_xyz(
-            transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat),
-            rpy=True,
-            degrees=True,
-        )
+        self.base_radians = quat_to_xyz(
+        transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat),
+        rpy=True,
+        degrees=False,  # Get radians directly
+    )
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.robot.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.robot.get_ang(), inv_base_quat)
@@ -161,12 +162,13 @@ class Go2BaseEnv:
 
     def _check_termination(self):
         self.reset_buf = self.episode_length_buf > self.max_episode_length
-        self.reset_buf |= torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"]
-        self.reset_buf |= torch.abs(self.base_euler[:, 0]) > self.env_cfg["termination_if_roll_greater_than"]
+        self.reset_buf |= torch.abs(self.base_radians[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"]
+        self.reset_buf |= torch.abs(self.base_radians[:, 0]) > self.env_cfg["termination_if_roll_greater_than"]
 
         time_out_idx = (self.episode_length_buf > self.max_episode_length).nonzero(as_tuple=False).reshape((-1,))
         self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=gs.device, dtype=gs.tc_float)
         self.extras["time_outs"][time_out_idx] = 1.0
+
 
     def _execute_actions(self, actions):
         """Execute actions - same for all environments"""
@@ -175,12 +177,6 @@ class Go2BaseEnv:
         target_dof_pos = exec_actions * self.env_cfg["action_scale"] + self.default_dof_pos
         self.robot.control_dofs_position(target_dof_pos, self.motors_dof_idx)
         self.scene.step()
-    
-        # prepare reward functions and multiply reward scales by dt
-        self.reward_functions = dict()
-        for name in self.reward_scales.keys():
-            self.reward_scales[name] *= self.dt
-            self.reward_functions[name] = getattr(self, "_reward_" + name)
 
 
     def reset_idx(self, envs_idx):
@@ -226,15 +222,10 @@ class Go2BaseEnv:
     def reset(self):
         self.reset_buf[:] = True
         self.reset_idx(torch.arange(self.num_envs, device=gs.device))
-        return self.obs_buf, None
+        return self.obs_buf, self.extras
     
 
     # Stability Rewards (navigation and petting need different stability rewards probably)
-    def _reward_base_height(self):
-        """Maintain proper base height - shared across all tasks"""
-        return torch.square(self.base_pos[:, 2] - self.reward_cfg["base_height_target"])
-    
-
     def _reward_lin_vel_z(self):
         """Penalize vertical velocity (jumping/falling) - shared"""
         return torch.square(self.base_lin_vel[:, 2])
