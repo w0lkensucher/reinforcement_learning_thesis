@@ -483,15 +483,32 @@ class Go2NavigationEnv(Go2BaseEnv):
 
     # Locomotion Rewards
     def _reward_tracking_lin_vel(self):
-        """Track commanded linear velocity - shared across all locomotion tasks"""
-        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
-        return torch.exp(-lin_vel_error / self.reward_cfg["tracking_sigma"])
+        """Track commanded linear velocity with direct error penalty"""
+        # Calculate velocity error
+        vel_error = self.commands[:, :2] - self.base_lin_vel[:, :2]
+        error_magnitude = torch.norm(vel_error, dim=1)
+        
+        # Direct penalty
+        tolerance = 0.2  # 0.2 m/s tolerance
+        penalty = torch.where(error_magnitude > tolerance,
+                            -(error_magnitude - tolerance) * 3.0,  # Linear penalty beyond tolerance
+                            torch.zeros_like(error_magnitude))     # No penalty within tolerance
+        
+        return penalty
 
 
     def _reward_tracking_ang_vel(self):
-        """Track commanded angular velocity - shared across all locomotion tasks"""
-        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
-        return torch.exp(-ang_vel_error / self.reward_cfg["tracking_sigma"])
+        """Track commanded angular velocity with direct error penalty"""
+        # Calculate angular velocity error
+        ang_vel_error = torch.abs(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        
+        # Direct penalty
+        tolerance = 0.3  # 0.3 rad/s tolerance
+        penalty = torch.where(ang_vel_error > tolerance,
+                            -(ang_vel_error - tolerance) * 2.0,    # Linear penalty beyond tolerance
+                            torch.zeros_like(ang_vel_error))      # No penalty within tolerance
+        
+        return penalty
     
 
     def _reward_forward_movement(self):

@@ -1,3 +1,4 @@
+"""OBSOLETE NOW, USING NEW STRUCTURE"""
 import torch
 import math
 import genesis as gs
