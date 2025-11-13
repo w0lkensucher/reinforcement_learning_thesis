@@ -121,9 +121,6 @@ class Go2PettingEnv(Go2BaseEnv):
    # Reward functions for petting
    def _reward_petting_response(self):
       """Reward for appropriate gesture response to petting"""
-      if not self.petting_enabled:
-         return torch.zeros(self.num_envs, device=self.device)
-      
       gesture_reward = torch.where(
          self.gesture_timer > 0,
          torch.full_like(self.head_touched, 0.2, dtype=torch.float),
@@ -134,9 +131,6 @@ class Go2PettingEnv(Go2BaseEnv):
 
    def _reward_petting_stability(self):
       """Reward for maintaining stability during petting gestures"""
-      if not self.petting_enabled or not (self.gesture_timer > 0).any():
-         return torch.zeros(self.num_envs, device=self.device)
-      
       # Reward stability during gesture
       ang_vel_magnitude = torch.norm(self.base_ang_vel, dim=1)
       height_deviation = torch.abs(self.base_pos[:, 2] - self.reward_cfg.get('base_height_target', 0.35))
