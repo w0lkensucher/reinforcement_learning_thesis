@@ -58,7 +58,7 @@ class Go2BaseEnv:
         )
 
 
-    def _setup_scene(self, show_viewer=False):
+    def _setup_scene(self):
         # create scene
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.dt, substeps=2),
@@ -67,7 +67,6 @@ class Go2BaseEnv:
                 camera_pos=(2.0, 0.0, 2.5),
                 camera_lookat=(0.0, 0.0, 0.5),
                 camera_fov=40,
-                show_viewer=show_viewer,
             ),
             vis_options=gs.options.VisOptions(rendered_envs_idx=list(range(1))),
             rigid_options=gs.options.RigidOptions(
@@ -151,6 +150,7 @@ class Go2BaseEnv:
         rpy=True,
         degrees=False,  # Get radians directly
     )
+        self.base_euler = quat_to_xyz(self.base_quat)  # Returns [roll, pitch, yaw] in eulers
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.robot.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.robot.get_ang(), inv_base_quat)

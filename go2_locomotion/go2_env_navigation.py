@@ -4,7 +4,7 @@ import numpy as np
 from go2_env_base import Go2BaseEnv
 
 class Go2NavigationEnv(Go2BaseEnv):
-    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False, wind_force=False, uneven_terrain=False):
+    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, wind_force=False, uneven_terrain=False):
         super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
         
         self.wind_force = wind_force
@@ -15,7 +15,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         self.terrain_entities = []
         self.terrain_height_map = None
 
-        self._setup_scene(show_viewer)
+        self._setup_scene()
 
         # Additional initialization for navigation-specific features can go here
         if uneven_terrain:

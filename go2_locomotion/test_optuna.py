@@ -14,7 +14,8 @@ import optuna
 import pickle
 import shutil
 import genesis as gs
-from go2_env import Go2Env
+# from go2_env import Go2Env
+from go2_env_navigation import Go2NavigationEnv
 from rsl_rl.runners import OnPolicyRunner
 import torch
 from go2_train_obstacle import get_cfgs
@@ -127,9 +128,10 @@ def objective(trial, num_envs=256):
     
     try:
         # Initialize environment and train
-        env = Go2Env(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
-                    reward_cfg=reward_cfg, command_cfg=command_cfg)
-        
+        env = Go2NavigationEnv(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
+                    reward_cfg=reward_cfg, command_cfg=command_cfg, wind_force=False,
+                    uneven_terrain=False)
+
         runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
         runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
         
@@ -210,12 +212,12 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Error sending Discord notification: {e}")
     
-    try:
-        start_training_with_params(filename, args.study_name)
-        message = (f"✅ Training with best hyperparameters from '{filename}' completed successfully!\n"
-                   f"Uploaded logs ({args.study_name}_optimized) to Google Drive.")
+    # try:
+    #     start_training_with_params(filename, args.study_name)
+    #     message = (f"✅ Training with best hyperparameters from '{filename}' completed successfully!\n"
+    #                f"Uploaded logs ({args.study_name}_optimized) to Google Drive.")
 
-    except Exception as e:
-        message = (f"❌ Training with best hyperparameters from '{filename}' failed: {e}")
+    # except Exception as e:
+    #     message = (f"❌ Training with best hyperparameters from '{filename}' failed: {e}")
 
-    send_discord_notification(webhook_url, message)
+    # send_discord_notification(webhook_url, message)

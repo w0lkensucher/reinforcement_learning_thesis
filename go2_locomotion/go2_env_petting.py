@@ -4,7 +4,7 @@ import numpy as np
 from go2_env_base import Go2BaseEnv
 
 class Go2PettingEnv(Go2BaseEnv):
-   def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
+   def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg):
         # Initialize base environment FIRST
         super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
 
@@ -26,8 +26,8 @@ class Go2PettingEnv(Go2BaseEnv):
 
         # Add gesture observations to obs buffer
         self.num_obs += 2  # gesture_active and touch_detected
-    
-        self._setup_scene(show_viewer)
+
+        self._setup_scene()
         self._setup_robot()
         self._setup_buffers()
         self._build_scene_and_setup()
@@ -61,7 +61,7 @@ class Go2PettingEnv(Go2BaseEnv):
         not_in_cooldown = self.gesture_cooldown == 0
         
         # 5. Robot relatively stable (not tilted)
-        roll_pitch_magnitude = torch.norm(self.base_euler[:, :2], dim=1)
+        roll_pitch_magnitude = torch.norm(self.base_radians[:, :2], dim=1)
         is_stable = roll_pitch_magnitude < 10.0  # Less than 10 degrees tilt
         
         pressure_touch = (gentle_height_reduction & 
