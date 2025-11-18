@@ -148,6 +148,27 @@ def objective(trial, num_envs=256):
         print(f"Trial {trial.number} failed: {e}")
         traceback.print_exc()  # <-- This prints the full error traceback to the terminal
         return -1000  # Large penalty for failed trials
+    
+    finally:
+        # EXPLICIT CLEANUP
+        try:
+            if env is not None:
+                if hasattr(env, 'scene'):
+                    env.scene.reset()  # Reset scene state
+                del env
+            if runner is not None:
+                del runner
+            
+            # Clear GPU memory
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            
+            # Clean up log directory
+            if os.path.exists(log_dir):
+                shutil.rmtree(log_dir)
+                
+        except Exception as cleanup_error:
+            print(f"Cleanup error in trial {trial.number}: {cleanup_error}")
 
 def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma, 
                            value_loss_coef, num_learning_epochs):
