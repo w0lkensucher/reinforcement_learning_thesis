@@ -79,7 +79,7 @@ def start_training_with_params(filename, study_name):
         # Restore original argv
         sys.argv = original_argv
 
-def objective(trial, num_envs=256):
+def objective(trial, num_envs=256, training_env = 'navigation'):
     """Optuna objective function for hyperparameter optimization"""
     
     # Sample hyperparameters
@@ -90,14 +90,29 @@ def objective(trial, num_envs=256):
     value_loss_coef = trial.suggest_float('value_loss_coef', 0.5, 3.0)
     num_learning_epochs = trial.suggest_int('num_learning_epochs', 3, 10)
     
-    # Reward scale parameters
-    tracking_lin_vel_scale = trial.suggest_float('tracking_lin_vel_scale', 1.5, 3.0)
-    obstacle_avoidance_scale = trial.suggest_float('obstacle_avoidance_scale', 0.1, 1.0)
+    # base environment reward scales
+    lin_vel_z_scale = trial.suggest_float('lin_vel_z_scale', 0.5, 3.0)
     action_rate_scale = trial.suggest_float('action_rate_scale', -0.02, -0.001)
-    stable_walk_scale = trial.suggest_float('stable_walk_scale', 0.1, 2.0)
-    straight_walk_scale = trial.suggest_float('straight_walk_scale', 0.1, 2.0)
-    stability_sigma = trial.suggest_float('stability_sigma', 0.05, 0.3)
-    straight_sigma = trial.suggest_float('straight_sigma', 0.05, 0.3)
+    similar_to_default_scale = trial.suggest_float('similar_to_default_scale', 0.1, 2.0)
+    
+
+    if training_env == 'navigation':
+        # navigation environment reward scales
+        tracking_lin_vel_scale = trial.suggest_float('tracking_lin_vel_scale', 1.5, 3.0)
+        tracking_ang_vel_scale = trial.suggest_float('tracking_ang_vel_scale', 0.5, 2.0)
+        forward_movement_scale = trial.suggest_float('forward_movement_scale', 0.1, 2.0)
+        straight_walk_when_clear_scale = trial.suggest_float('straight_walk_when_clear_scale', 0.1, 2.0)
+        adaptive_base_height_scale = trial.suggest_float('adaptive_base_height_scale', 0.1, 2.0)
+        landing_stability_scale = trial.suggest_float('landing_stability_scale', 0.1, 2.0)
+        jumping_behavior_scale = trial.suggest_float('jumping_behavior_scale', 0.1, 2.0)
+        orientation_stability_scale = trial.suggest_float('orientation_stability_scale', 0.1, 2.0)
+        angular_velocity_stability_scale = trial.suggest_float('angular_velocity_stability_scale', 0.1, 2.0)
+        upright_posture_scale = trial.suggest_float('upright_posture_scale', 0.1, 2.0)
+        ground_clearance_scale = trial.suggest_float('ground_clearance_scale', 0.1, 2.0)
+        obstacle_avoidance_scale = trial.suggest_float('obstacle_avoidance_scale', 0.1, 1.0)
+
+    else: # pet robot
+        print()
 
     # Environment parameters
     obstacle_density = trial.suggest_float('obstacle_density', 0.01, 0.05)

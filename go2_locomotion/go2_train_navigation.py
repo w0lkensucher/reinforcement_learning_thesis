@@ -135,6 +135,7 @@ def get_navigation_cfgs():
             # Navigation-focused rewards
             "tracking_lin_vel": 2.0,
             "tracking_ang_vel": 1.5,
+            'forward_movement': 1.0,
             "straight_walk_when_clear": 1.0,
             "obstacle_avoidance": 2.0,
             "adaptive_base_height": 1.5,
@@ -142,6 +143,8 @@ def get_navigation_cfgs():
             "angular_velocity_stability": 1.5,
             "upright_posture": 1.0,
             "landing_stability": 0.5,
+            "ground_clearance": 0.5,
+            "landing_stability": 1.0,
             
             # Base rewards (reduced for navigation)
             "lin_vel_z": 1.0,
