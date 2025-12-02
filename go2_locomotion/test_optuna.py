@@ -95,10 +95,13 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     action_rate_scale = trial.suggest_float('action_rate_scale', -0.02, -0.001)
     similar_to_default_scale = trial.suggest_float('similar_to_default_scale', 0.1, 2.0)
     
+    reward_cfg['reward_scales']['lin_vel_z'] = lin_vel_z_scale
+    reward_cfg['reward_scales']['action_rate'] = action_rate_scale
+    reward_cfg['reward_cfg']['similar_to_default'] = similar_to_default_scale
 
     if training_env == 'navigation':
         # navigation environment reward scales
-        tracking_lin_vel_scale = trial.suggest_float('tracking_lin_vel_scale', 1.5, 3.0)
+        tracking_lin_vel_scale = trial.suggest_float('tracking_lin_vel_scale', 1.0, 3.0)
         tracking_ang_vel_scale = trial.suggest_float('tracking_ang_vel_scale', 0.5, 2.0)
         forward_movement_scale = trial.suggest_float('forward_movement_scale', 0.1, 2.0)
         straight_walk_when_clear_scale = trial.suggest_float('straight_walk_when_clear_scale', 0.1, 2.0)
@@ -110,9 +113,29 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         upright_posture_scale = trial.suggest_float('upright_posture_scale', 0.1, 2.0)
         ground_clearance_scale = trial.suggest_float('ground_clearance_scale', 0.1, 2.0)
         obstacle_avoidance_scale = trial.suggest_float('obstacle_avoidance_scale', 0.1, 1.0)
-
+    
+        reward_cfg['reward_scales']['tracking_lin_vel'] = tracking_lin_vel_scale
+        reward_cfg['reward_scales']['tracking_ang_vel'] = tracking_ang_vel_scale
+        reward_cfg['reward_scales']['forward_movement'] = forward_movement_scale
+        reward_cfg['reward_scales']['straight_walk_when_clear'] = straight_walk_when_clear_scale
+        reward_cfg['reward_scales']['adaptive_base_height'] = adaptive_base_height_scale
+        reward_cfg['reward_scales']['landing_stability'] = landing_stability_scale
+        reward_cfg['reward_scales']['jumping_behavior'] = jumping_behavior_scale
+        reward_cfg['reward_scales']['orientation_stability'] = orientation_stability_scale
+        reward_cfg['reward_scales']['angular_velocity_stability'] = angular_velocity_stability_scale
+        reward_cfg['reward_scales']['upright_posture'] = upright_posture_scale
+        reward_cfg['reward_scales']['ground_clearance'] = ground_clearance_scale
+        reward_cfg['reward_scales']['obstacle_avoidance'] = obstacle_avoidance_scale
     else: # pet robot
-        print()
+        petting_response_scale = trial.suggest_float('petting_response_scale', 1.0, 5.0)
+        petting_stability_scale = trial.suggest_float('petting_stability_scale', 1.0, 5.0)
+        calm_behavior_scale = trial.suggest_float('calm_behavior_scale', 0.5, 3.0)
+        flexible_height_scale = trial.suggest_float('flexible_height_scale', 0.5, 3.0)
+
+        reward_cfg['reward_scales']['petting_response'] = petting_response_scale
+        reward_cfg['reward_scales']['petting_stability'] = petting_stability_scale
+        reward_cfg['reward_scales']['calm_behavior'] = calm_behavior_scale
+        reward_cfg['reward_scales']['flexible_height'] = flexible_height_scale
 
     # Environment parameters
     obstacle_density = trial.suggest_float('obstacle_density', 0.01, 0.05)
@@ -124,14 +147,6 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     # Update with trial parameters
     env_cfg['obstacle_density'] = obstacle_density
     env_cfg['episode_length_s'] = episode_length
-    
-    reward_cfg['reward_scales']['tracking_lin_vel'] = tracking_lin_vel_scale
-    reward_cfg['reward_scales']['obstacle_avoidance'] = obstacle_avoidance_scale
-    reward_cfg['reward_scales']['action_rate'] = action_rate_scale
-    reward_cfg['reward_scales']['stable_walk'] = stable_walk_scale
-    reward_cfg['reward_scales']['straight_walk'] = straight_walk_scale
-    reward_cfg['stability_sigma'] = stability_sigma
-    reward_cfg['straight_sigma'] = straight_sigma
 
     train_cfg = get_train_cfg_optimized(trial, learning_rate, clip_param, 
                                        entropy_coef, gamma, value_loss_coef, 

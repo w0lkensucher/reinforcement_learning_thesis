@@ -124,12 +124,6 @@ def get_petting_cfgs():
             "calm_behavior": 1.0,           # Calm when not petted
             "flexible_height": 1.0,         # Allow height variation
             
-            # Reduced locomotion rewards
-            "tracking_lin_vel": 0.5,        # Lower than navigation
-            "tracking_ang_vel": 0.3,        # Lower than navigation
-            "orientation_stability": 1.5,   # Still important
-            "upright_posture": 0.3,         # Reduced flexibility
-            
             # Very reduced base rewards
             "lin_vel_z": 0.3,              # Allow some jumping for gestures
             "action_rate": 0.1,            # Allow expressive movements
