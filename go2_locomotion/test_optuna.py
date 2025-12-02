@@ -18,7 +18,8 @@ import genesis as gs
 from go2_env_navigation import Go2NavigationEnv
 from rsl_rl.runners import OnPolicyRunner
 import torch
-from go2_train_obstacle import get_cfgs
+from go2_train_navigation import get_cfgs as get_navigation_cfgs
+from go2_train_petting import get_cfgs as get_petting_cfgs
 import traceback
 import argparse
 from datetime import datetime
@@ -94,10 +95,6 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     lin_vel_z_scale = trial.suggest_float('lin_vel_z_scale', 0.5, 3.0)
     action_rate_scale = trial.suggest_float('action_rate_scale', -0.02, -0.001)
     similar_to_default_scale = trial.suggest_float('similar_to_default_scale', 0.1, 2.0)
-    
-    reward_cfg['reward_scales']['lin_vel_z'] = lin_vel_z_scale
-    reward_cfg['reward_scales']['action_rate'] = action_rate_scale
-    reward_cfg['reward_cfg']['similar_to_default'] = similar_to_default_scale
 
     if training_env == 'navigation':
         # navigation environment reward scales
@@ -113,6 +110,27 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         upright_posture_scale = trial.suggest_float('upright_posture_scale', 0.1, 2.0)
         ground_clearance_scale = trial.suggest_float('ground_clearance_scale', 0.1, 2.0)
         obstacle_avoidance_scale = trial.suggest_float('obstacle_avoidance_scale', 0.1, 1.0)
+
+    else: # pet robot
+        petting_response_scale = trial.suggest_float('petting_response_scale', 1.0, 5.0)
+        petting_stability_scale = trial.suggest_float('petting_stability_scale', 1.0, 5.0)
+        calm_behavior_scale = trial.suggest_float('calm_behavior_scale', 0.5, 3.0)
+        flexible_height_scale = trial.suggest_float('flexible_height_scale', 0.5, 3.0)
+
+    # Environment parameters
+    obstacle_density = trial.suggest_float('obstacle_density', 0.01, 0.05)
+    episode_length = trial.suggest_float('episode_length_s', 15.0, 40.0)
+
+    if training_env == 'petting':
+        env_cfg, obs_cfg, reward_cfg, command_cfg = get_petting_cfgs()
+
+        reward_cfg['reward_scales']['petting_response'] = petting_response_scale
+        reward_cfg['reward_scales']['petting_stability'] = petting_stability_scale
+        reward_cfg['reward_scales']['calm_behavior'] = calm_behavior_scale
+        reward_cfg['reward_scales']['flexible_height'] = flexible_height_scale
+
+    else:
+        env_cfg, obs_cfg, reward_cfg, command_cfg = get_navigation_cfgs()
     
         reward_cfg['reward_scales']['tracking_lin_vel'] = tracking_lin_vel_scale
         reward_cfg['reward_scales']['tracking_ang_vel'] = tracking_ang_vel_scale
@@ -126,24 +144,11 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         reward_cfg['reward_scales']['upright_posture'] = upright_posture_scale
         reward_cfg['reward_scales']['ground_clearance'] = ground_clearance_scale
         reward_cfg['reward_scales']['obstacle_avoidance'] = obstacle_avoidance_scale
-    else: # pet robot
-        petting_response_scale = trial.suggest_float('petting_response_scale', 1.0, 5.0)
-        petting_stability_scale = trial.suggest_float('petting_stability_scale', 1.0, 5.0)
-        calm_behavior_scale = trial.suggest_float('calm_behavior_scale', 0.5, 3.0)
-        flexible_height_scale = trial.suggest_float('flexible_height_scale', 0.5, 3.0)
-
-        reward_cfg['reward_scales']['petting_response'] = petting_response_scale
-        reward_cfg['reward_scales']['petting_stability'] = petting_stability_scale
-        reward_cfg['reward_scales']['calm_behavior'] = calm_behavior_scale
-        reward_cfg['reward_scales']['flexible_height'] = flexible_height_scale
-
-    # Environment parameters
-    obstacle_density = trial.suggest_float('obstacle_density', 0.01, 0.05)
-    episode_length = trial.suggest_float('episode_length_s', 15.0, 40.0)
     
-    # Create configurations with sampled parameters
-    env_cfg, obs_cfg, reward_cfg, command_cfg = get_cfgs()
-    
+    reward_cfg['reward_scales']['lin_vel_z'] = lin_vel_z_scale
+    reward_cfg['reward_scales']['action_rate'] = action_rate_scale
+    reward_cfg['reward_scales']['similar_to_default'] = similar_to_default_scale
+
     # Update with trial parameters
     env_cfg['obstacle_density'] = obstacle_density
     env_cfg['episode_length_s'] = episode_length
@@ -240,13 +245,14 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--study_name", type=str, default="go2-obstacles")
     parser.add_argument("-T", "--n_trials", type=int, default=50)
     parser.add_argument("-N", "--num_envs", type=int, default=256)
+    parser.add_argument("--training_env", type=str, choices=['navigation', 'petting'], default='navigation')
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
     
     # Create study
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=args.n_trials)
+    study.optimize(lambda trial: objective(trial, num_envs= args.num_envs, training_env=args.training_env), n_trials=args.n_trials)
     
     print("Best parameters:", study.best_params)
     print("Best value:", study.best_value)
