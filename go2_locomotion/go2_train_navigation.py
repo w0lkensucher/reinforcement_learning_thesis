@@ -119,7 +119,7 @@ def get_navigation_cfgs():
     }
     
     obs_cfg = {
-        "num_obs": 49,  # Base (45) + obstacle signals (2) + distances (2)
+        "num_obs": 47,  # Base (45) + obstacle signals (2) + distances (2)
         "obs_scales": {
             "lin_vel": 2.0,
             "ang_vel": 0.25,

@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import sys
-from go2_train_obstacle import main as train_main
+# from go2_train_obstacle import main as train_main
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -50,7 +50,7 @@ def start_training_with_params(filename, study_name):
     
     try:
         # Call the training main function directly
-        train_main()
+        # train_main()
         print("✅ Training completed successfully!")
 
         log_folder = f"logs/{study_name}_optimized"
@@ -84,6 +84,10 @@ def start_training_with_params(filename, study_name):
 def objective(trial, num_envs=256, training_env = 'navigation'):
     """Optuna objective function for hyperparameter optimization"""
     
+    env = None
+    runner = None
+    log_dir = None
+
     # Sample hyperparameters
     learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-3, log=True)
     clip_param = trial.suggest_float('clip_param', 0.1, 0.4)
@@ -153,10 +157,6 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     # Update with trial parameters
     env_cfg['obstacle_density'] = obstacle_density
     env_cfg['episode_length_s'] = episode_length
-
-    train_cfg = get_train_cfg_optimized(trial, learning_rate, clip_param, 
-                                       entropy_coef, gamma, value_loss_coef, 
-                                       num_learning_epochs)
     
     # Create unique experiment name
     exp_name = f"optuna_trial_{trial.number}"
@@ -171,6 +171,10 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         else:
             env = Go2PettingEnv(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
                         reward_cfg=reward_cfg, command_cfg=command_cfg)
+
+        train_cfg = get_train_cfg_optimized(trial, learning_rate, clip_param, 
+                                        entropy_coef, gamma, value_loss_coef, 
+                                        num_learning_epochs)
 
         runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
         runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
