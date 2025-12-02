@@ -16,6 +16,7 @@ import shutil
 import genesis as gs
 # from go2_env import Go2Env
 from go2_env_navigation import Go2NavigationEnv
+from go2_env_petting import Go2PettingEnv
 from rsl_rl.runners import OnPolicyRunner
 import torch
 from go2_train_navigation import get_navigation_cfgs
@@ -162,10 +163,14 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     log_dir = f"logs/hyperopt/{exp_name}"
     
     try:
+        if training_env == 'navigation':
         # Initialize environment and train
-        env = Go2NavigationEnv(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
-                    reward_cfg=reward_cfg, command_cfg=command_cfg, wind_force=False,
-                    uneven_terrain=False)
+            env = Go2NavigationEnv(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
+                        reward_cfg=reward_cfg, command_cfg=command_cfg, wind_force=False,
+                        uneven_terrain=False)
+        else:
+            env = Go2PettingEnv(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
+                        reward_cfg=reward_cfg, command_cfg=command_cfg)
 
         runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
         runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
