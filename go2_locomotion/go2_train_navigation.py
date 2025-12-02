@@ -130,7 +130,7 @@ def get_navigation_cfgs():
     
     reward_cfg = {
         "jump_height_threshold": 0.08,
-        "jump_reward_height": 0.17,
+        "base_height_target": 0.42,
         "reward_scales": {
             # Navigation-focused rewards
             "tracking_lin_vel": 2.0,
