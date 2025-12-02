@@ -18,8 +18,8 @@ import genesis as gs
 from go2_env_navigation import Go2NavigationEnv
 from rsl_rl.runners import OnPolicyRunner
 import torch
-from go2_train_navigation import get_cfgs as get_navigation_cfgs
-from go2_train_petting import get_cfgs as get_petting_cfgs
+from go2_train_navigation import get_navigation_cfgs
+from go2_train_petting import get_petting_cfgs
 import traceback
 import argparse
 from datetime import datetime
