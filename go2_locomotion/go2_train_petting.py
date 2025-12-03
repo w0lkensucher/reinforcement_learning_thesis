@@ -95,14 +95,12 @@ def get_petting_cfgs():
         "clip_actions": 1.0,
         
         # PETTING-SPECIFIC CONFIG
-        'head_touch_radius': 0.2,
         'gentle_speed_threshold': 0.3,
-        'head_height_offset': 0.25,
-        'use_height_detection': True,
         'gentle_press_range': [0.02, 0.08],
         'gentle_vel_threshold': 0.1,
-        'gesture_duration': 100,
-        'cooldown_duration': 250,
+
+        'petting_probability': 0.1,  # 10% chance to start petting each step
+        'petting_duration': 50,  # Duration of petting force application (1s at 50Hz)
     }
     
     obs_cfg = {
@@ -179,6 +177,28 @@ def evaluate_petting_behavior(runner, env_cfg, obs_cfg, reward_cfg, command_cfg)
         'avg_petting_detections': np.mean(petting_responses) if petting_responses else 0,
         'total_gesture_activations': sum(gesture_counts),
     }
+
+def test_petting_manually():
+    """Test petting responses manually"""
+    gs.init(logging_level="info")
+    
+    env_cfg, obs_cfg, reward_cfg, command_cfg = get_petting_cfgs()
+    env = Go2PettingEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg, 
+                       reward_cfg=reward_cfg, command_cfg=command_cfg)
+    
+    obs, _ = env.reset()
+    
+    for step in range(1000):
+        # Trigger manual petting every 200 steps
+        if step % 200 == 0:
+            env.trigger_manual_petting(env_id=0, duration_steps=100)
+            print(f"Manual petting triggered at step {step}")
+        
+        actions = torch.zeros((1, 12))  # Neutral actions
+        obs, rewards, dones, info = env.step(actions)
+        
+        if step % 50 == 0:
+            print(f"Step {step}: Reward={rewards[0]:.3f}, Gesture={(env.gesture_timer[0] > 0).item()}")
 
 
 def main():

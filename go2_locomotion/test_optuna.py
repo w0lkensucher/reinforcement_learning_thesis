@@ -24,7 +24,7 @@ from go2_train_petting import get_petting_cfgs
 import traceback
 import argparse
 from datetime import datetime
-from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_discord_notification, zip_log_folder
+# from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_discord_notification, zip_log_folder
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -122,12 +122,11 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         calm_behavior_scale = trial.suggest_float('calm_behavior_scale', 0.5, 3.0)
         flexible_height_scale = trial.suggest_float('flexible_height_scale', 0.5, 3.0)
 
-    # Environment parameters
-    obstacle_density = trial.suggest_float('obstacle_density', 0.01, 0.05)
-    episode_length = trial.suggest_float('episode_length_s', 15.0, 40.0)
-
     if training_env == 'petting':
         env_cfg, obs_cfg, reward_cfg, command_cfg = get_petting_cfgs()
+
+        # Environment parameters
+        episode_length = trial.suggest_float('episode_length_s', 15.0, 20.0)
 
         reward_cfg['reward_scales']['petting_response'] = petting_response_scale
         reward_cfg['reward_scales']['petting_stability'] = petting_stability_scale
@@ -137,6 +136,12 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     else:
         env_cfg, obs_cfg, reward_cfg, command_cfg = get_navigation_cfgs()
     
+        # Environment parameters
+        obstacle_density = trial.suggest_float('obstacle_density', 0.01, 0.05)
+        episode_length = trial.suggest_float('episode_length_s', 15.0, 40.0)
+
+        env_cfg['obstacle_density'] = obstacle_density
+
         reward_cfg['reward_scales']['tracking_lin_vel'] = tracking_lin_vel_scale
         reward_cfg['reward_scales']['tracking_ang_vel'] = tracking_ang_vel_scale
         reward_cfg['reward_scales']['forward_movement'] = forward_movement_scale
@@ -150,13 +155,12 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         reward_cfg['reward_scales']['ground_clearance'] = ground_clearance_scale
         reward_cfg['reward_scales']['obstacle_avoidance'] = obstacle_avoidance_scale
     
+
+    env_cfg['episode_length_s'] = episode_length
+
     reward_cfg['reward_scales']['lin_vel_z'] = lin_vel_z_scale
     reward_cfg['reward_scales']['action_rate'] = action_rate_scale
     reward_cfg['reward_scales']['similar_to_default'] = similar_to_default_scale
-
-    # Update with trial parameters
-    env_cfg['obstacle_density'] = obstacle_density
-    env_cfg['episode_length_s'] = episode_length
     
     # Create unique experiment name
     exp_name = f"optuna_trial_{trial.number}"
@@ -180,7 +184,7 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
 
         train_cfg = get_train_cfg_optimized(trial, learning_rate, clip_param, 
                                         entropy_coef, gamma, value_loss_coef, 
-                                        num_learning_epochs)
+                                        num_learning_epochs, training_env)
 
         runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
 
@@ -245,7 +249,15 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
             torch.cuda.empty_cache()
 
 def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma, 
-                           value_loss_coef, num_learning_epochs):
+                           value_loss_coef, num_learning_epochs, training_env='navigation'):
+    
+    if training_env == 'petting':
+        num_steps = trial.suggest_int('num_steps_per_env', 16, 32, step=4)
+        max_iterations = 200
+    else:
+        num_steps = trial.suggest_int('num_steps_per_env', 16, 32, step=4)
+        max_iterations = 100
+
     return {
         "algorithm": {
             "class_name": "PPO",
