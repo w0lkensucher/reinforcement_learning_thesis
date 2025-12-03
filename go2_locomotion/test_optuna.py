@@ -163,6 +163,12 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     log_dir = f"logs/hyperopt/{exp_name}"
     
     try:
+
+        # EXPLICIT CLEANUP
+        
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
         if training_env == 'navigation':
         # Initialize environment and train
             env = Go2NavigationEnv(num_envs=num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, 
@@ -177,7 +183,16 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
                                         num_learning_epochs)
 
         runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
-        runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
+
+        for step in range(100):
+            runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
+
+            if step % 10 == 0:
+                current_reward = torch.mean(env.episode_sums['reward']).item()
+                trial.report(current_reward, step)
+
+                if trial.should_prune():
+                    raise optuna.exceptions.TrialPruned()
         
         # Get final reward as optimization target
         final_reward = torch.mean(env.episode_sums['reward']).item() 
@@ -188,21 +203,35 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
             
         return final_reward
         
+
+    except optuna.exceptions.TrialPruned:
+        print(f"Trial {trial.number} pruned.")
+        raise
+    
     except Exception as e:
         print(f"Trial {trial.number} failed: {e}")
         traceback.print_exc()  # <-- This prints the full error traceback to the terminal
         return -1000  # Large penalty for failed trials
     
     finally:
-        # EXPLICIT CLEANUP
+
         try:
             if env is not None:
                 if hasattr(env, 'scene'):
                     env.scene.reset()  # Reset scene state
+                if hasattr(env, 'close'):
+                    env.close()
                 del env
             if runner is not None:
+                if hasattr(runner, 'alg') and hasattr(runner.alg, 'actor_critic'):
+                    del runner.alg.actor_critic
+                if hasattr(runner, 'alg'):
+                    del runner.alg
                 del runner
             
+            import gc
+            gc.collect()
+
             # Clear GPU memory
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
@@ -213,6 +242,7 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
                 
         except Exception as cleanup_error:
             print(f"Cleanup error in trial {trial.number}: {cleanup_error}")
+            torch.cuda.empty_cache()
 
 def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma, 
                            value_loss_coef, num_learning_epochs):
@@ -253,14 +283,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--study_name", type=str, default="go2-obstacles")
     parser.add_argument("-T", "--n_trials", type=int, default=50)
-    parser.add_argument("-N", "--num_envs", type=int, default=256)
+    parser.add_argument("-N", "--num_envs", type=int, default=128)
     parser.add_argument("--training_env", type=str, choices=['navigation', 'petting'], default='navigation')
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
     
     # Create study
-    study = optuna.create_study(direction='maximize')
+    study = optuna.create_study(direction='maximize', pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=20))
     study.optimize(lambda trial: objective(trial, num_envs= args.num_envs, training_env=args.training_env), n_trials=args.n_trials)
     
     print("Best parameters:", study.best_params)
