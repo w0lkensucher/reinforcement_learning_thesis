@@ -24,7 +24,7 @@ from go2_train_petting import get_petting_cfgs
 import traceback
 import argparse
 from datetime import datetime
-# from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_discord_notification, zip_log_folder
+from upload_file_to_gdrive import authenticate_google_drive, upload_file, send_discord_notification, zip_log_folder
 from dotenv import load_dotenv
 
 load_dotenv()
