@@ -89,11 +89,11 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     log_dir = None
 
     # Sample hyperparameters
-    learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-3, log=True)
-    clip_param = trial.suggest_float('clip_param', 0.1, 0.4)
-    entropy_coef = trial.suggest_float('entropy_coef', 0.001, 0.1, log=True)
-    gamma = trial.suggest_float('gamma', 0.98, 0.999)
-    value_loss_coef = trial.suggest_float('value_loss_coef', 0.5, 3.0)
+    learning_rate = trial.suggest_float('learning_rate', 1e-4, 5e-4, log=True)
+    clip_param = trial.suggest_float('clip_param', 0.15, 0.3)
+    entropy_coef = trial.suggest_float('entropy_coef', 0.001, 0.05, log=True)
+    gamma = trial.suggest_float('gamma', 0.98, 0.99)
+    value_loss_coef = trial.suggest_float('value_loss_coef', 0.5, 2.0)
     num_learning_epochs = trial.suggest_int('num_learning_epochs', 3, 10)
     
     # base environment reward scales
@@ -184,15 +184,7 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
 
         runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
 
-        for step in range(100):
-            runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
-
-            if step % 10 == 0:
-                current_reward = torch.mean(env.episode_sums['reward']).item()
-                trial.report(current_reward, step)
-
-                if trial.should_prune():
-                    raise optuna.exceptions.TrialPruned()
+        runner.learn(num_learning_iterations=100, init_at_random_ep_len=True)
         
         # Get final reward as optimization target
         final_reward = torch.mean(env.episode_sums['reward']).item() 
@@ -202,12 +194,7 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
             shutil.rmtree(log_dir)
             
         return final_reward
-        
 
-    except optuna.exceptions.TrialPruned:
-        print(f"Trial {trial.number} pruned.")
-        raise
-    
     except Exception as e:
         print(f"Trial {trial.number} failed: {e}")
         traceback.print_exc()  # <-- This prints the full error traceback to the terminal
