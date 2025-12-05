@@ -181,6 +181,9 @@ def main():
     parser.add_argument("--max_iterations", type=int, default=500)
     parser.add_argument("--uneven_terrain", action='store_true')
     parser.add_argument("--wind_force", action='store_true')
+    parser.add_argument("--resume", action='store_true')
+    parser.add_argument("--resume_path", type=str, default=None)
+    parser.add_argument("--params_pkl", type=str, default=None)
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
@@ -192,6 +195,43 @@ def main():
 
     env_cfg, obs_cfg, reward_cfg, command_cfg = get_navigation_cfgs()
     train_cfg = get_navigation_train_cfg(args.exp_name, args.max_iterations)
+    
+    optimized_params_pkl = None
+    if args.params_pkl is not None:
+        with open(args.params_pkl, 'rb') as f:
+            optimized_params_pkl = pickle.load(f)
+
+            print("Applying optimized parameters from pickle file...")
+            # Update train_cfg with optimized_params_pkl
+            train_cfg["algorithm"]["learning_rate"] = optimized_params_pkl.get("learning_rate", train_cfg["algorithm"]["learning_rate"])
+            train_cfg["algorithm"]["clip_param"] = optimized_params_pkl.get("clip_param", train_cfg["algorithm"]["clip_param"])
+            train_cfg["algorithm"]["entropy_coef"] = optimized_params_pkl.get("entropy_coef", train_cfg["algorithm"]["entropy_coef"])
+            train_cfg["algorithm"]["gamma"] = optimized_params_pkl.get("gamma", train_cfg["algorithm"]["gamma"])
+            train_cfg["algorithm"]["value_loss_coef"] = optimized_params_pkl.get("value_loss_coef", train_cfg["algorithm"]["value_loss_coef"])
+            train_cfg["algorithm"]["num_learning_epochs"] = optimized_params_pkl.get("num_learning_epochs", train_cfg["algorithm"]["num_learning_epochs"])
+            
+            # base rewards
+            reward_cfg["reward_scales"]["lin_vel_z"] = optimized_params_pkl.get("lin_vel_z_scale", reward_cfg["reward_scales"]["lin_vel_z"])
+            reward_cfg["reward_scales"]["action_rate"] = optimized_params_pkl.get("action_rate_scale", reward_cfg["reward_scales"]["action_rate"])
+            reward_cfg["reward_scales"]["similar_to_default"] = optimized_params_pkl.get("similar_to_default_scale", reward_cfg["reward_scales"]["similar_to_default"])
+
+            # navigation rewards
+            reward_cfg["reward_scales"]["tracking_lin_vel"] = optimized_params_pkl.get("tracking_lin_vel_scale", reward_cfg["reward_scales"]["tracking_lin_vel"])
+            reward_cfg["reward_scales"]["tracking_ang_vel"] = optimized_params_pkl.get("tracking_ang_vel_scale", reward_cfg["reward_scales"]["tracking_ang_vel"])
+            reward_cfg["reward_scales"]["forward_movement"] = optimized_params_pkl.get("forward_movement_scale", reward_cfg["reward_scales"]["forward_movement"])
+            reward_cfg["reward_scales"]["straight_walk_when_clear"] = optimized_params_pkl.get("straight_walk_when_clear_scale", reward_cfg["reward_scales"]["straight_walk_when_clear"])
+            reward_cfg["reward_scales"]["adaptive_base_height"] = optimized_params_pkl.get("adaptive_base_height_scale", reward_cfg["reward_scales"]["adaptive_base_height"])
+            reward_cfg["reward_scales"]["landing_stability"] = optimized_params_pkl.get("landing_stability_scale", reward_cfg["reward_scales"]["landing_stability"])
+            reward_cfg["reward_scales"]["jumping_behavior"] = optimized_params_pkl.get("jumping_behavior_scale", reward_cfg["reward_scales"]["jumping_behavior"])
+            reward_cfg["reward_scales"]["orientation_stability"] = optimized_params_pkl.get("orientation_stability_scale", reward_cfg["reward_scales"]["orientation_stability"])
+            reward_cfg["reward_scales"]["angular_velocity_stability"] = optimized_params_pkl.get("angular_velocity_stability_scale", reward_cfg["reward_scales"]["angular_velocity_stability"])
+            reward_cfg["reward_scales"]["upright_posture"] = optimized_params_pkl.get("upright_posture_scale", reward_cfg["reward_scales"]["upright_posture"])
+            reward_cfg["reward_scales"]["ground_clearance"] = optimized_params_pkl.get("ground_clearance_scale", reward_cfg["reward_scales"]["ground_clearance"])
+            reward_cfg["reward_scales"]["obstacle_avoidance"] = optimized_params_pkl.get("obstacle_avoidance_scale", reward_cfg["reward_scales"]["obstacle_avoidance"])
+            
+            # Update env_cfg if present
+            env_cfg["obstacle_density"] = optimized_params_pkl.get("obstacle_density", env_cfg["obstacle_density"])
+            env_cfg["episode_length_s"] = optimized_params_pkl.get("episode_length_s", env_cfg["episode_length_s"])
 
     # Save configs
     pickle.dump([env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg],
@@ -209,6 +249,22 @@ def main():
     )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
+
+    if args.resume_path and os.path.exists(args.resume_path):
+        print(f"🔄 Resuming training from: {args.resume_path}")
+        runner.load(args.resume_path)
+
+    elif args.resume:
+        # Find latest checkpoint in current experiment
+        model_files = [f for f in os.listdir(log_dir) if f.startswith('model_') and f.endswith('.pt')]
+        if model_files:
+            # Sort by checkpoint number
+            model_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
+            latest_model = model_files[-1]
+            resume_path = os.path.join(log_dir, latest_model)
+            print(f"🔄 Resuming from latest checkpoint: {resume_path}")
+            runner.load(resume_path)
+
     runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
 

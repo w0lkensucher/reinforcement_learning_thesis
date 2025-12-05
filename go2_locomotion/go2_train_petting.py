@@ -13,7 +13,6 @@ if os.name != 'nt':
 import argparse
 import pickle
 import shutil
-import csv
 import torch
 import numpy as np
 
@@ -206,7 +205,9 @@ def main():
     parser.add_argument("-e", "--exp_name", type=str, default="go2-petting")
     parser.add_argument("-B", "--num_envs", type=int, default=1024)  # Fewer envs for petting
     parser.add_argument("--max_iterations", type=int, default=300)
-    parser.add_argument("--eval_petting", action='store_true')
+    parser.add_argument("--resume", action='store_true')
+    parser.add_argument("--resume_path", type=str, default=None)
+    parser.add_argument("--params_pkl", type=str, default=None)
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
@@ -218,6 +219,33 @@ def main():
 
     env_cfg, obs_cfg, reward_cfg, command_cfg = get_petting_cfgs()
     train_cfg = get_petting_train_cfg(args.exp_name, args.max_iterations)
+
+    optimized_params_pkl = None
+    if args.params_pkl is not None:
+        with open(args.params_pkl, 'rb') as f:
+            optimized_params_pkl = pickle.load(f)
+
+            print("Applying optimized parameters from pickle file...")
+
+            # Update train_cfg with optimized_params_pkl
+            train_cfg["algorithm"]["learning_rate"] = optimized_params_pkl.get("learning_rate", train_cfg["algorithm"]["learning_rate"])
+            train_cfg["algorithm"]["clip_param"] = optimized_params_pkl.get("clip_param", train_cfg["algorithm"]["clip_param"])
+            train_cfg["algorithm"]["entropy_coef"] = optimized_params_pkl.get("entropy_coef", train_cfg["algorithm"]["entropy_coef"])
+            train_cfg["algorithm"]["gamma"] = optimized_params_pkl.get("gamma", train_cfg["algorithm"]["gamma"])
+            train_cfg["algorithm"]["value_loss_coef"] = optimized_params_pkl.get("value_loss_coef", train_cfg["algorithm"]["value_loss_coef"])
+            train_cfg["algorithm"]["num_learning_epochs"] = optimized_params_pkl.get("num_learning_epochs", train_cfg["algorithm"]["num_learning_epochs"])
+            
+            # base rewards
+            reward_cfg["reward_scales"]["lin_vel_z"] = optimized_params_pkl.get("lin_vel_z_scale", reward_cfg["reward_scales"]["lin_vel_z"])
+            reward_cfg["reward_scales"]["action_rate"] = optimized_params_pkl.get("action_rate_scale", reward_cfg["reward_scales"]["action_rate"])
+            reward_cfg["reward_scales"]["similar_to_default"] = optimized_params_pkl.get("similar_to_default_scale", reward_cfg["reward_scales"]["similar_to_default"])
+
+            # petting rewards
+            reward_cfg["reward_scales"]["petting_response"] = optimized_params_pkl.get("petting_response_scale", reward_cfg["reward_scales"]["petting_response"])
+            reward_cfg["reward_scales"]["petting_stability"] = optimized_params_pkl.get("petting_stability_scale", reward_cfg["reward_scales"]["petting_stability"])
+            reward_cfg["reward_scales"]["calm_behavior"] = optimized_params_pkl.get("calm_behavior_scale", reward_cfg["reward_scales"]["calm_behavior"])
+            reward_cfg["reward_scales"]["flexible_height"] = optimized_params_pkl.get("flexible_height_scale", reward_cfg["reward_scales"]["flexible_height"])
+
 
     # Save configs
     pickle.dump([env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg],
@@ -233,19 +261,23 @@ def main():
     )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
-    
-    if args.eval_petting:
-        # Train with periodic petting evaluation
-        eval_interval = 25
-        for i in range(0, args.max_iterations, eval_interval):
-            batch_size = min(eval_interval, args.max_iterations - i)
-            runner.learn(num_learning_iterations=batch_size, init_at_random_ep_len=True)
+
+    if args.resume_path and os.path.exists(args.resume_path):
+        print(f"🔄 Resuming training from: {args.resume_path}")
+        runner.load(args.resume_path)
+
+    elif args.resume:
+        # Find latest checkpoint in current experiment
+        model_files = [f for f in os.listdir(log_dir) if f.startswith('model_') and f.endswith('.pt')]
+        if model_files:
+            # Sort by checkpoint number
+            model_files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
+            latest_model = model_files[-1]
+            resume_path = os.path.join(log_dir, latest_model)
+            print(f"🔄 Resuming from latest checkpoint: {resume_path}")
+            runner.load(resume_path)
             
-            # Evaluate petting behavior
-            petting_stats = evaluate_petting_behavior(runner, env_cfg, obs_cfg, reward_cfg, command_cfg)
-            print(f"Iteration {i+batch_size}: Avg gestures/step: {petting_stats['avg_gestures_per_step']:.3f}")
-    else:
-        runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
+    runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
 
 if __name__ == "__main__":
