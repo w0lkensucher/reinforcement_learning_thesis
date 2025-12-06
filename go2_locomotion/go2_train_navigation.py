@@ -66,7 +66,8 @@ def get_navigation_train_cfg(exp_name, max_iterations):
         },
         "num_steps_per_env": 24,
         "save_interval": 100,
-        "seed": 1,
+        "empirical_normalization": None,
+        "seed": 1, # set to different seeds for multiple runs
     }
 
 

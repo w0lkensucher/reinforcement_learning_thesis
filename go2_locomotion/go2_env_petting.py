@@ -4,7 +4,7 @@ import numpy as np
 from go2_env_base import Go2BaseEnv
 
 class Go2PettingEnv(Go2BaseEnv):
-    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg):
+    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
             # Initialize base environment FIRST
             super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
 
@@ -25,10 +25,7 @@ class Go2PettingEnv(Go2BaseEnv):
             self.is_being_petted = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
             self.petting_duration = env_cfg.get('petting_duration', 50)  # Duration of petting force application (1s at 50Hz)
 
-            # Add gesture observations to obs buffer
-            self.num_obs += 2  # gesture_active and touch_detected
-
-            self._setup_scene()
+            self._setup_scene(show_viewer)
             self._setup_robot()
             self._setup_buffers()
             self._build_scene_and_setup()
@@ -288,6 +285,12 @@ class Go2PettingEnv(Go2BaseEnv):
             gesture_active.unsqueeze(1),  # 1: gesture active signal
             touch_detected.unsqueeze(1),  # 1: touch detected signal
         ], axis=-1)
+
+
+    def get_observations(self):
+        """Get navigation observations"""
+        self.extras["observations"]["critic"] = self.obs_buf
+        return self.obs_buf, self.extras
 
 
     def _compute_rewards(self):

@@ -58,7 +58,7 @@ class Go2BaseEnv:
         )
 
 
-    def _setup_scene(self):
+    def _setup_scene(self, show_viewer):
         # create scene
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.dt, substeps=2),
@@ -77,7 +77,8 @@ class Go2BaseEnv:
                 # for this locomotion policy there are usually no more than 30 collision pairs
                 # set a low value can save memory
                 max_collision_pairs=30,
-            )
+            ),
+            show_viewer=show_viewer
         )
         # add normal flat terrain (can be overridden)
         self._create_flat_terrain()
@@ -100,6 +101,9 @@ class Go2BaseEnv:
             [self.obs_cfg["obs_scales"]["lin_vel"], self.obs_cfg["obs_scales"]["lin_vel"], self.obs_cfg["obs_scales"]["ang_vel"]],
             device=gs.device, dtype=gs.tc_float,
         )
+
+        self.base_radians = torch.zeros((self.num_envs, 3), device=gs.device, dtype=gs.tc_float)
+        self.base_euler = torch.zeros((self.num_envs, 3), device=gs.device, dtype=gs.tc_float)
         
         self.actions = torch.zeros((self.num_envs, self.num_actions), device=gs.device, dtype=gs.tc_float)
         self.last_actions = torch.zeros_like(self.actions)

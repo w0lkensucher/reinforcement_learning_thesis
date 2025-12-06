@@ -16,6 +16,18 @@ import shutil
 import torch
 import numpy as np
 
+from importlib import metadata
+
+try:
+    try:
+        if metadata.version("rsl-rl"):
+            raise ImportError
+    except metadata.PackageNotFoundError:
+        if metadata.version("rsl-rl-lib") != "2.2.4":
+            raise ImportError
+except (metadata.PackageNotFoundError, ImportError) as e:
+    raise ImportError("Please uninstall 'rsl_rl' and install 'rsl-rl-lib==2.2.4'.") from e
+
 from rsl_rl.runners import OnPolicyRunner
 import genesis as gs
 from go2_env_petting import Go2PettingEnv
@@ -54,7 +66,8 @@ def get_petting_train_cfg(exp_name, max_iterations):
         },
         "num_steps_per_env": 32,  # Longer episodes for petting
         "save_interval": 50,
-        "seed": 1,
+        "empirical_normalization": None,
+        "seed": 1, # set to different seeds for multiple runs
     }
 
 
