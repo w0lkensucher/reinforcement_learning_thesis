@@ -516,7 +516,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         forward_vel = self.base_lin_vel[:, 0]
         
         # Heavy penalty for standing still
-        standing_penalty = torch.where(forward_vel < 0.1, -2.0, 0.0)
+        standing_penalty = torch.where(forward_vel < 0.1, -1.0, 0.0)
         
         # Reward forward movement
         forward_reward = torch.clamp(forward_vel, 0, 2.0)  # Cap at 2 m/s
@@ -653,7 +653,7 @@ class Go2NavigationEnv(Go2BaseEnv):
                     
                     # Reward jumping over low obstacles
                     near_low_obstacle = distance < 1.0
-                    jumping_reward += torch.where(is_jumping & near_low_obstacle, 2.0, 0.0)
+                    jumping_reward += torch.where(is_jumping & near_low_obstacle, 5.0, 0.0)
         
         return jumping_reward
 
@@ -670,11 +670,11 @@ class Go2NavigationEnv(Go2BaseEnv):
         
         # Progressive penalty as robot approaches falling
         roll_penalty = torch.where(roll > max_roll * 0.5,  # Start penalty at 50% of termination threshold
-                                -(roll / max_roll) * 2.0,  # Scale penalty by how close to falling
+                                -(roll / max_roll) * 1.5,  # Scale penalty by how close to falling
                                 torch.zeros_like(roll))
         
         pitch_penalty = torch.where(pitch > max_pitch * 0.5,
-                                -(pitch / max_pitch) * 2.0,
+                                -(pitch / max_pitch) * 1.5,
                                 torch.zeros_like(pitch))
         
         return roll_penalty + pitch_penalty
@@ -754,11 +754,9 @@ class Go2NavigationEnv(Go2BaseEnv):
             collision_mask = distance < collision_threshold
             close_mask = (distance < safety_margin) & ~collision_mask
             
-            # Severe penalty for collision
-            collision_penalty += torch.where(collision_mask, -3.0, 0.0)
+            collision_penalty += torch.where(collision_mask, -1.0, 0.0)
             
-            # Moderate penalty for being too close
-            collision_penalty += torch.where(close_mask, -0.5, 0.0)
+            collision_penalty += torch.where(close_mask, -0.1, 0.0)
         
         return collision_penalty
     
