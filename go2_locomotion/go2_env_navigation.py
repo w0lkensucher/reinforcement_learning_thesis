@@ -526,11 +526,12 @@ class Go2NavigationEnv(Go2BaseEnv):
 
     def _reward_straight_walk_when_clear(self):
         """Reward walking straight when no obstacles are nearby"""
-        _, _, low_dist, high_dist = self._detect_nearby_obstacles()
+        low_obs, high_obs, low_dist, high_dist = self._detect_nearby_obstacles()
         
         # Find closest obstacle of any type
         closest_distance = torch.min(low_dist, high_dist)
-        
+        jumpable_low = (low_dist < 1.0) & (low_obs > 0.0)
+
         # Distance-based straight walking encouragement
         safe_distance = 2.0      # Full straight walking reward beyond this
         warning_distance = 1.0   # Start reducing reward below this
@@ -538,7 +539,7 @@ class Go2NavigationEnv(Go2BaseEnv):
 
         # Calculate straight walking factor (0 to 1)
         straight_factor = torch.where(
-            closest_distance >= safe_distance,
+            (closest_distance >= safe_distance) | jumpable_low,
             1.0,  # Full reward when safe
             torch.where(
                 closest_distance >= warning_distance,

@@ -93,7 +93,7 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     clip_param = trial.suggest_float('clip_param', 0.15, 0.3)
     entropy_coef = trial.suggest_float('entropy_coef', 0.005, 0.02, log=True)
     gamma = trial.suggest_float('gamma', 0.98, 0.998)
-    value_loss_coef = trial.suggest_float('value_loss_coef', 0.5, 2.0)
+    value_loss_coef = trial.suggest_float('value_loss_coef', 0.5, 1.5)
     num_learning_epochs = trial.suggest_int('num_learning_epochs', 3, 10)
     
     # base environment reward scales
