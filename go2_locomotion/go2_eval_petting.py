@@ -89,11 +89,9 @@ def main():
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
     resume_path = os.path.join(log_dir, f"model_{args.ckpt}.pt")
     runner.load(resume_path)
-
     policy = runner.get_inference_policy(device=gs.device)
 
     obs, _ = env.reset()
-    
     with torch.no_grad():
         while True:
             actions = policy(obs)
