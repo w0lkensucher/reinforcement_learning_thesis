@@ -669,11 +669,11 @@ class Go2NavigationEnv(Go2BaseEnv):
         
         # Progressive penalty as robot approaches falling
         roll_penalty = torch.where(roll > max_roll * 0.5,  # Start penalty at 50% of termination threshold
-                                -(roll / max_roll) * 5.0,  # Scale penalty by how close to falling
+                                -(roll / max_roll) * 2.0,  # Scale penalty by how close to falling
                                 torch.zeros_like(roll))
         
         pitch_penalty = torch.where(pitch > max_pitch * 0.5,
-                                -(pitch / max_pitch) * 5.0,
+                                -(pitch / max_pitch) * 2.0,
                                 torch.zeros_like(pitch))
         
         return roll_penalty + pitch_penalty
@@ -754,10 +754,10 @@ class Go2NavigationEnv(Go2BaseEnv):
             close_mask = (distance < safety_margin) & ~collision_mask
             
             # Severe penalty for collision
-            collision_penalty += torch.where(collision_mask, -10.0, 0.0)
+            collision_penalty += torch.where(collision_mask, -3.0, 0.0)
             
             # Moderate penalty for being too close
-            collision_penalty += torch.where(close_mask, -2.0, 0.0)
+            collision_penalty += torch.where(close_mask, -0.5, 0.0)
         
         return collision_penalty
     

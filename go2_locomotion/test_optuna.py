@@ -91,15 +91,15 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
     # Sample hyperparameters
     learning_rate = trial.suggest_float('learning_rate', 1e-4, 5e-4, log=True)
     clip_param = trial.suggest_float('clip_param', 0.15, 0.3)
-    entropy_coef = trial.suggest_float('entropy_coef', 0.001, 0.05, log=True)
-    gamma = trial.suggest_float('gamma', 0.98, 0.99)
+    entropy_coef = trial.suggest_float('entropy_coef', 0.005, 0.02, log=True)
+    gamma = trial.suggest_float('gamma', 0.98, 0.998)
     value_loss_coef = trial.suggest_float('value_loss_coef', 0.5, 2.0)
     num_learning_epochs = trial.suggest_int('num_learning_epochs', 3, 10)
     
     # base environment reward scales
-    lin_vel_z_scale = trial.suggest_float('lin_vel_z_scale', 0.5, 3.0)
+    lin_vel_z_scale = trial.suggest_float('lin_vel_z_scale', 0.5, 2.5)
     action_rate_scale = trial.suggest_float('action_rate_scale', -0.02, -0.001)
-    similar_to_default_scale = trial.suggest_float('similar_to_default_scale', 0.1, 2.0)
+    similar_to_default_scale = trial.suggest_float('similar_to_default_scale', 0.1, 1.0)
 
     if training_env == 'navigation':
         # navigation environment reward scales
@@ -238,11 +238,11 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
 def get_train_cfg_optimized(trial, lr, clip_param, entropy_coef, gamma, 
                            value_loss_coef, num_learning_epochs, training_env='navigation'):
     
+    num_steps = trial.suggest_int('num_steps_per_env', 16, 32, step=4)
+    
     if training_env == 'petting':
-        num_steps = trial.suggest_int('num_steps_per_env', 16, 32, step=4)
         max_iterations = 200
     else:
-        num_steps = trial.suggest_int('num_steps_per_env', 16, 32, step=4)
         max_iterations = 100
 
     return {
