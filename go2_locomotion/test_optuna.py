@@ -117,10 +117,13 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         obstacle_avoidance_scale = trial.suggest_float('obstacle_avoidance_scale', 0.1, 1.0)
 
     else: # pet robot
-        petting_response_scale = trial.suggest_float('petting_response_scale', 1.0, 5.0)
-        petting_stability_scale = trial.suggest_float('petting_stability_scale', 1.0, 5.0)
-        calm_behavior_scale = trial.suggest_float('calm_behavior_scale', 0.5, 3.0)
-        flexible_height_scale = trial.suggest_float('flexible_height_scale', 0.5, 3.0)
+        petting_response_scale = trial.suggest_float('petting_response_scale', 0.1, 1.0)
+        petting_stability_scale = trial.suggest_float('petting_stability_scale', .05, .5)
+        calm_behavior_scale = trial.suggest_float('calm_behavior_scale', 0.02, .30)
+        flexible_height_scale = trial.suggest_float('flexible_height_scale', 0.02, .30)
+
+        petting_probability = trial.suggest_float('petting_probability', 0.005, 0.02)        # 0.5% - 2%
+        petting_duration = trial.suggest_int('petting_duration', 30, 100)                    # 0.6-2 seconds at 50Hz
 
     if training_env == 'petting':
         env_cfg, obs_cfg, reward_cfg, command_cfg = get_petting_cfgs()
@@ -133,6 +136,8 @@ def objective(trial, num_envs=256, training_env = 'navigation'):
         reward_cfg['reward_scales']['calm_behavior'] = calm_behavior_scale
         reward_cfg['reward_scales']['flexible_height'] = flexible_height_scale
 
+        env_cfg['petting_probability'] = petting_probability
+        env_cfg['petting_duration'] = petting_duration
     else:
         env_cfg, obs_cfg, reward_cfg, command_cfg = get_navigation_cfgs()
     

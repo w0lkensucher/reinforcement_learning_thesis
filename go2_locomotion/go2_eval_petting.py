@@ -96,6 +96,12 @@ def main():
         while True:
             actions = policy(obs)
             obs, rews, dones, infos = env.step(actions)
+            
+            reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
+            if len(reset_idx) > 0:
+                for idx in reset_idx:
+                    obs_reset, _ = env.reset_idx(reset_idx)
+                    obs[reset_idx] = obs_reset
 
 
 if __name__ == "__main__":
