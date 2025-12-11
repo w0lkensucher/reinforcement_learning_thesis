@@ -15,6 +15,7 @@ import pickle
 import shutil
 import torch
 import numpy as np
+import datetime
 
 from importlib import metadata
 
@@ -138,6 +139,7 @@ def get_petting_cfgs():
             "lin_vel_z": 0.3,              # Allow some jumping for gestures
             "action_rate": 0.1,            # Allow expressive movements
             "similar_to_default": 0.05,    # Allow gesture poses
+            "no_fall": 1.0,                 # Moderate penalty for falling
         },
     }
     
@@ -262,7 +264,7 @@ def main():
 
     # Save configs
     pickle.dump([env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg],
-                open(f"{log_dir}/cfgs.pkl", "wb"))
+                open(f"{log_dir}_{datetime.datetime.now().strftime('%Y%m%d')}/cfgs.pkl", "wb"))                      # add datetime to distinguish runs
 
     # Create PETTING environment
     env = Go2PettingEnv(

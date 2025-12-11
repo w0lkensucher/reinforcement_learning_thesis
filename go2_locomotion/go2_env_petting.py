@@ -217,6 +217,15 @@ class Go2PettingEnv(Go2BaseEnv):
                             height_error * 0.2,  # Very gentle penalty
                             height_error * 1.0)  # Moderate penalty
     
+    
+    def _reward_no_fall(self):
+        # Negative reward if roll or pitch exceeds threshold
+        roll = torch.abs(self.base_radians[:, 0])
+        pitch = torch.abs(self.base_radians[:, 1])
+        roll_thresh = self.env_cfg.get("termination_if_roll_greater_than", 45)
+        pitch_thresh = self.env_cfg.get("termination_if_pitch_greater_than", 45)
+        fallen = (roll > roll_thresh) | (pitch > pitch_thresh)
+        return torch.where(fallen, torch.full_like(roll, -2.0), torch.zeros_like(roll))
 
     def step(self, actions):
         """Petting-specific step logic"""
