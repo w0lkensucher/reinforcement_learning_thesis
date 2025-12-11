@@ -88,8 +88,7 @@ def main():
         env_cfg=env_cfg,
         obs_cfg=obs_cfg,
         reward_cfg=reward_cfg, 
-        command_cfg=command_cfg, 
-        train_cfg=train_cfg, 
+        command_cfg=command_cfg,
         show_viewer=True,
     )
 
@@ -99,7 +98,7 @@ def main():
 
     policy = runner.get_inference_policy(device=gs.device)
 
-    obs_cfg, _ = env.reset()
+    obs, _ = env.reset()
 
     with torch.no_grad():
         while True:
