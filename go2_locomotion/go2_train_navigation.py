@@ -17,6 +17,7 @@ import csv
 import torch
 import numpy as np
 from importlib import metadata
+from datetime import datetime
 
 try:
     try:
@@ -71,7 +72,7 @@ def get_navigation_train_cfg(exp_name, max_iterations):
     }
 
 
-def get_navigation_cfgs():
+def get_navigation_cfgs(curriculum_stage=1):
     env_cfg = {
         "num_actions": 12,
         "default_joint_angles": {  # [rad]
@@ -130,28 +131,23 @@ def get_navigation_cfgs():
     }
     
     reward_cfg = {
-        "jump_height_threshold": 0.08,
+        "reward_scales":{key: 0.0 for key in [
+            "tracking_lin_vel",
+            "tracking_ang_vel",
+            "forward_movement",
+            "straight_walk_when_clear",
+            "obstacle_avoidance",
+            "adaptive_base_height",
+            "orientation_stability",
+            "angular_velocity_stability",
+            "upright_posture",
+            "landing_stability",
+            "ground_clearance",
+            "lin_vel_z",
+            "action_rate",
+            "similar_to_default",
+        ]},
         "base_height_target": 0.42,
-        "reward_scales": {
-            # Navigation-focused rewards
-            "tracking_lin_vel": 2.0,
-            "tracking_ang_vel": 1.5,
-            'forward_movement': 1.0,
-            "straight_walk_when_clear": 1.0,
-            "obstacle_avoidance": 2.0,
-            "adaptive_base_height": 1.5,
-            "orientation_stability": 2.0,
-            "angular_velocity_stability": 1.5,
-            "upright_posture": 1.0,
-            "landing_stability": 0.5,
-            "ground_clearance": 0.5,
-            "landing_stability": 1.0,
-            
-            # Base rewards (reduced for navigation)
-            "lin_vel_z": 1.0,
-            "action_rate": 0.5,
-            "similar_to_default": 0.2,
-        },
     }
     
     command_cfg = {
@@ -160,6 +156,88 @@ def get_navigation_cfgs():
         "lin_vel_y_range": [-0.3, 0.3],  # Allow lateral movement
         "ang_vel_range": [-0.5, 0.5],    # Allow turning
     }
+
+
+    if curriculum_stage == 1:
+        # Stage 1: Standing safely
+        command_cfg["lin_vel_x_range"] = [0.0, 0.0]
+        command_cfg["lin_vel_y_range"] = [0.0, 0.0]
+        command_cfg["ang_vel_range"] = [0.0, 0.0]
+
+        reward_cfg["reward_scales"]["upright_posture"] = 1.0
+        reward_cfg["reward_scales"]["orientation_stability"] = 0.5
+        reward_cfg["reward_scales"]["similar_to_default"] = 0.01
+        reward_cfg["reward_scales"]["adaptive_base_height"] = 3.5
+
+        env_cfg["episode_length_s"] = 10.0
+        env_cfg["use_obstacles"] = False
+
+    elif curriculum_stage == 2:
+        # Stage 2: Walking
+        reward_cfg["reward_scales"]["forward_movement"] = 1.0
+        reward_cfg["reward_scales"]["upright_posture"] = 1.0
+        reward_cfg["reward_scales"]["orientation_stability"] = 1.0
+        reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.1
+        reward_cfg["reward_scales"]["adaptive_base_height"] = 1.0
+        # Add these essential walking rewards:
+        reward_cfg["reward_scales"]["action_rate"] = 0.5              # Smooth gait
+        reward_cfg["reward_scales"]["lin_vel_z"] = 1.0               # No bouncing
+        reward_cfg["reward_scales"]["similar_to_default"] = 0.1       # Stay reasonable
+        reward_cfg["reward_scales"]["adaptive_base_height"] = 1.0
+        
+        # Optional but helpful for better walking:
+        reward_cfg["reward_scales"]["angular_velocity_stability"] = 0.5  # No spinning
+        
+        # Command ranges for walking
+        command_cfg["lin_vel_x_range"] = [0.2, 0.8]  # Moderate walking speeds
+        command_cfg["lin_vel_y_range"] = [0.0, 0.0]  # No lateral movement yet
+        command_cfg["ang_vel_range"] = [0.0, 0.0]    # No turning yet
+
+        env_cfg["episode_length_s"] = 15.0
+        env_cfg["use_obstacles"] = False
+
+    elif curriculum_stage == 3:
+        # Stage 3: Basic navigation with obstacles
+        reward_cfg["reward_scales"]["forward_movement"] = 1.0
+        reward_cfg["reward_scales"]["upright_posture"] = 1.0
+        reward_cfg["reward_scales"]["orientation_stability"] = 1.0
+        reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.5
+        reward_cfg["reward_scales"]["obstacle_avoidance"] = 1.0
+        reward_cfg["reward_scales"]["landing_stability"] = 0.5
+        reward_cfg["reward_scales"]["adaptive_base_height"] = 1.0
+
+        env_cfg["episode_length_s"] = 20.0
+        env_cfg["use_obstacles"] = True
+    
+    elif curriculum_stage == 4:
+        # Stage 4: jumping over obstacles
+        reward_cfg["reward_scales"]["forward_movement"] = 1.0
+
+    elif curriculum_stage == 5:
+        # Stage 5: Full navigation
+        reward_cfg = {
+            "jump_height_threshold": 0.08,
+            "base_height_target": 0.42,
+            "reward_scales": {
+                # Navigation-focused rewards
+                "tracking_lin_vel": 2.0,
+                "tracking_ang_vel": 1.5,
+                'forward_movement': 1.0,
+                "straight_walk_when_clear": 1.0,
+                "obstacle_avoidance": 2.0,
+                "adaptive_base_height": 1.5,
+                "orientation_stability": 2.0,
+                "angular_velocity_stability": 1.5,
+                "upright_posture": 1.0,
+                "landing_stability": 0.5,
+                "ground_clearance": 0.5,
+                
+                # Base rewards (reduced for navigation)
+                "lin_vel_z": 1.0,
+                "action_rate": 0.5,
+                "similar_to_default": 0.05,
+            },
+        }
     
     return env_cfg, obs_cfg, reward_cfg, command_cfg
 
@@ -182,6 +260,7 @@ def main():
     parser.add_argument("--max_iterations", type=int, default=500)
     parser.add_argument("--uneven_terrain", action='store_true')
     parser.add_argument("--wind_force", action='store_true')
+    parser.add_argument("--curriculum_stage", type=int, default=1)
     parser.add_argument("--resume", action='store_true')
     parser.add_argument("--resume_path", type=str, default=None)
     parser.add_argument("--params_pkl", type=str, default=None)
@@ -189,12 +268,12 @@ def main():
 
     gs.init(logging_level="warning")
     
-    log_dir = f"logs/{args.exp_name}"
-    if os.path.exists(log_dir):
+    log_dir = f"logs/{args.exp_name}_{datetime.now().strftime('%Y%m%d')}"
+    if os.path.exists(log_dir) and not args.resume:
         shutil.rmtree(log_dir)
     os.makedirs(log_dir, exist_ok=True)
 
-    env_cfg, obs_cfg, reward_cfg, command_cfg = get_navigation_cfgs()
+    env_cfg, obs_cfg, reward_cfg, command_cfg = get_navigation_cfgs(curriculum_stage=args.curriculum_stage)
     train_cfg = get_navigation_train_cfg(args.exp_name, args.max_iterations)
     
     optimized_params_pkl = None

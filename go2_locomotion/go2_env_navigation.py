@@ -332,6 +332,8 @@ class Go2NavigationEnv(Go2BaseEnv):
     # obstacle creation
     def _create_obstacles(self):
         """Create obstacles in the environment"""
+        if not self.env_cfg.get('use_obstacles', False):
+            return
         try:
             terrain_size = self.env_cfg['terrain_size']
             density = self.env_cfg['obstacle_density']
@@ -438,7 +440,9 @@ class Go2NavigationEnv(Go2BaseEnv):
     def _detect_nearby_obstacles(self):
         """Detect obstacles near the robot and classify as jumpable or avoidable"""
         if not self.env_cfg.get('use_obstacles', False) or len(self.obstacle_positions) == 0:
-            return torch.zeros(self.num_envs, device=self.device), torch.zeros(self.num_envs, device=self.device)
+                zeros = torch.zeros(self.num_envs, device=self.device)
+                infs = torch.full((self.num_envs,), float('inf'), device=self.device)
+                return zeros, zeros, infs, infs 
         
         robot_pos = self.base_pos[:, :2]  # x, y position
         detection_radius = 1.5  # Distance ahead to look for obstacles
@@ -598,7 +602,9 @@ class Go2NavigationEnv(Go2BaseEnv):
                                     height_error * 0.5,  # Gentle penalty within tolerance
                                     height_error * 2.0)  # Stronger penalty outside tolerance
         
-        return -height_penalty
+        bonus = (height_error < 0.02).float() * 0.1  # Small bonus for being very close to target height
+        
+        return -height_penalty + bonus
     
 
     def _reward_landing_stability(self):
