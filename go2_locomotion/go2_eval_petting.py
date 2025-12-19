@@ -1,6 +1,6 @@
 import os
 import sys
-if os.name != 'nt':
+if sys.version_info < (3, 12):
     os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'local'
 
     import sys
