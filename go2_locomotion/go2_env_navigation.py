@@ -29,8 +29,20 @@ class Go2NavigationEnv(Go2BaseEnv):
         self._setup_robot()
         self._create_obstacles()
         self._setup_buffers()
-        self._build_scene_and_setup()
         
+        # optional camera
+        if self.env_cfg.get("visualize_camera", True):
+            self.cam = self.scene.add_camera(
+                # res=(960, 540),
+                res=(1920, 1080),
+                pos=(4.0, 0.0, 4.0),
+                lookat=(0, 0, 1.0),
+                fov=30,
+                GUI=True
+            )
+
+        self._build_scene_and_setup()
+
 
     # Setup extensions
     def _setup_robot(self):
@@ -417,7 +429,11 @@ class Go2NavigationEnv(Go2BaseEnv):
     # Observation Helpers
     def _compute_observations(self):
         """Compute observations including navigation-specific data"""
-        low_obs, high_obs, _, _ = self._detect_nearby_obstacles()
+        if self.env_cfg.get('use_obstacles', False):
+            low_obs, high_obs, _, _ = self._detect_nearby_obstacles()
+        else:
+            low_obs = torch.zeros(self.num_envs, device=self.device)
+            high_obs = torch.zeros(self.num_envs, device=self.device)
 
         self.obs_buf = torch.cat([
         self.base_ang_vel * self.obs_scales["ang_vel"],  # 3
@@ -574,37 +590,40 @@ class Go2NavigationEnv(Go2BaseEnv):
         """Maintain appropriate base height with terrain and obstacle awareness"""
         base_height = self.base_pos[:, 2]
         
-        if self.uneven_terrain:
-            # Adaptive height based on local terrain
-            target_heights = []
-            for env_idx in range(self.num_envs):
-                robot_x = self.base_pos[env_idx, 0].item()
-                robot_y = self.base_pos[env_idx, 1].item()
-                terrain_height = self._get_terrain_height_at_position(robot_x, robot_y)
-                target_heights.append(terrain_height + 0.42)  # 42cm above terrain
-            target_height = torch.tensor(target_heights, device=self.device)
-        else:
+        # if self.uneven_terrain:
+        #     # Adaptive height based on local terrain
+        #     target_heights = []
+        #     for env_idx in range(self.num_envs):
+        #         robot_x = self.base_pos[env_idx, 0].item()
+        #         robot_y = self.base_pos[env_idx, 1].item()
+        #         terrain_height = self._get_terrain_height_at_position(robot_x, robot_y)
+        #         target_heights.append(terrain_height + 0.42)  # 42cm above terrain
+        #     target_height = torch.tensor(target_heights, device=self.device)
+        # else:
             # Fixed height for flat terrain
-            target_height = self.reward_cfg["base_height_target"]
+
+        target_height = self.reward_cfg["base_height_target"]
         
-        # Base height error
-        height_error = torch.abs(base_height - target_height)
+        # # Base height error
+        # height_error = torch.abs(base_height - target_height)
         
-        # Allow more height variation during jumping over low obstacles
-        low_obs, _ = self._detect_nearby_obstacles()[:2]
+        # # Allow more height variation during jumping over low obstacles
+        # low_obs, _ = self._detect_nearby_obstacles()[:2]
         
-        # More lenient height control when jumping
-        is_jumping = (self.base_lin_vel[:, 2] > 0.1) & (low_obs > 0.1)
-        tolerance = torch.where(is_jumping, 0.3, 0.1)  # 30cm tolerance when jumping, 10cm normally
+        # # More lenient height control when jumping
+        # is_jumping = (self.base_lin_vel[:, 2] > 0.1) & (low_obs > 0.1)
+        # tolerance = torch.where(is_jumping, 0.3, 0.1)  # 30cm tolerance when jumping, 10cm normally
         
-        # Scaled penalty - less penalty within tolerance
-        height_penalty = torch.where(height_error < tolerance, 
-                                    height_error * 0.5,  # Gentle penalty within tolerance
-                                    height_error * 2.0)  # Stronger penalty outside tolerance
+        # # Scaled penalty - less penalty within tolerance
+        # height_penalty = torch.where(height_error < tolerance, 
+        #                             height_error * 0.5,  # Gentle penalty within tolerance
+        #                             height_error * 2.0)  # Stronger penalty outside tolerance
         
-        bonus = (height_error < 0.02).float() * 0.1  # Small bonus for being very close to target height
+        # bonus = (height_error < 0.02).float() * 0.1  # Small bonus for being very close to target height
         
-        return -height_penalty + bonus
+        # return -height_penalty + bonus
+
+        return torch.square(base_height - target_height)
     
 
     def _reward_landing_stability(self):
@@ -696,11 +715,11 @@ class Go2NavigationEnv(Go2BaseEnv):
         max_safe_ang_vel = 2.0  # rad/s
         
         roll_vel_penalty = torch.where(roll_vel > max_safe_ang_vel,
-                                    -torch.square(roll_vel - max_safe_ang_vel),
+                                    torch.square(roll_vel - max_safe_ang_vel),
                                     torch.zeros_like(roll_vel))
         
         pitch_vel_penalty = torch.where(pitch_vel > max_safe_ang_vel,
-                                    -torch.square(pitch_vel - max_safe_ang_vel),
+                                    torch.square(pitch_vel - max_safe_ang_vel),
                                     torch.zeros_like(pitch_vel))
         
         return roll_vel_penalty + pitch_vel_penalty

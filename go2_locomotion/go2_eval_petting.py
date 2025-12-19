@@ -1,4 +1,5 @@
 import os
+import sys
 if os.name != 'nt':
     os.environ['SETUPTOOLS_USE_DISTUTILS'] = 'local'
 
@@ -14,6 +15,9 @@ import argparse
 import pickle
 from importlib import metadata
 
+from tqdm import tqdm
+from  contextlib import redirect_stdout, redirect_stderr
+from io import StringIO
 import torch
 import numpy as np
 
@@ -48,6 +52,8 @@ def main():
                         help="Probability of petting event per step (if not manual)")
     parser.add_argument("--eval_steps", type=int, default=1000,
                         help="Interval (in steps) to print petting statistics")
+    parser.add_argument("--record", action='store_true', default=False,
+                        help="Record evaluation video")
     
     # Display options
     parser.add_argument("--stats_interval", type=int, default=500,
@@ -57,7 +63,7 @@ def main():
     
     args = parser.parse_args()
 
-    gs.init()
+    gs.init(logging_level="warning")
 
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = pickle.load(
@@ -66,6 +72,9 @@ def main():
     
     # Disable training rewards for pure behavior evaluation
     reward_cfg["reward_scales"] = {}
+    env_cfg["episode_length_s"] = 60.0
+
+    max_sim_step = int(env_cfg["episode_length_s"] * 30)
 
     # Override petting settings for evaluation
     if args.manual_petting:
@@ -77,14 +86,25 @@ def main():
         if not args.silent:
             print(f"🤖 Automatic petting mode: {args.petting_frequency*100:.1f}% chance per step")
 
-    env = Go2PettingEnv(
-        num_envs=1,
-        env_cfg=env_cfg,
-        obs_cfg=obs_cfg,
-        reward_cfg=reward_cfg,
-        command_cfg=command_cfg,
-        show_viewer=True,
-    )
+    if args.silent:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            env = Go2PettingEnv(
+                num_envs=1,
+                env_cfg=env_cfg,
+                obs_cfg=obs_cfg,
+                reward_cfg=reward_cfg,
+                command_cfg=command_cfg,
+                show_viewer=True,
+            )
+    else:
+        env = Go2PettingEnv(
+            num_envs=1,
+            env_cfg=env_cfg,
+            obs_cfg=obs_cfg,
+            reward_cfg=reward_cfg,
+            command_cfg=command_cfg,
+            show_viewer=True,
+            )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
     resume_path = os.path.join(log_dir, f"model_{args.ckpt}.pt")
@@ -93,16 +113,50 @@ def main():
 
     obs, _ = env.reset()
     with torch.no_grad():
-        while True:
-            actions = policy(obs)
-            obs, rews, dones, infos = env.step(actions)
+        if args.record:
+            print("🎥 Recording video...")
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                env.cam.start_recording()
+        
+        with tqdm(total=max_sim_step, 
+                desc="🐕 Evaluating Petting", 
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                file=sys.stdout,
+                dynamic_ncols=True) as pbar:
             
-            reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
-            if len(reset_idx) > 0:
-                for idx in reset_idx:
-                    obs_reset, _ = env.reset_idx(reset_idx)
-                    obs[reset_idx] = obs_reset
+            petting_events = 0
+            manual_petting_timer = 0
 
+            for step in range(max_sim_step):
+                if args.manual_petting:
+                    if step % args.petting_interval == 0:
+                        manual_petting_timer = args.petting_duration
+                        petting_events += 1
+                        if not args.silent:
+                            print(f"🖐️ Manual petting started at step {step} for {args.petting_duration} steps")
+                    
+                    if manual_petting_timer > 0:
+                        manual_petting_timer -= 1
+                    
+                    if manual_petting_timer == 0 and step % args.petting_interval == args.petting_duration:
+                        if not args.silent:
+                            print(f"🖐️ Manual petting ended at step {step}")
+
+                actions = policy(obs)
+                obs, rews, dones, infos = env.step(actions)
+                
+                reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
+                if len(reset_idx) > 0:
+                    env.reset_idx(reset_idx)
+
+                pbar.update(1)
+                        
+        if args.record:
+            print("🎥 Stopping recording...")
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                env.cam.stop_recording(fps=30)
+                    
+    print(f"✅ Evaluation complete! Total petting events: {petting_events}")
 
 if __name__ == "__main__":
     main()

@@ -228,9 +228,9 @@ class Go2BaseEnv:
         return self.obs_buf, self.extras
     
 
-    # Stability Rewards (navigation and petting need different stability rewards probably)
+    # Stability Rewards (navigation and petting need different stability rewards)
     def _reward_lin_vel_z(self):
-        """Penalize vertical velocity (jumping/falling) - shared"""
+        # Penalize z axis base linear velocity
         return torch.square(self.base_lin_vel[:, 2])
     
 

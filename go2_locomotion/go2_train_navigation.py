@@ -16,6 +16,7 @@ import shutil
 import csv
 import torch
 import numpy as np
+import re
 from importlib import metadata
 from datetime import datetime
 
@@ -38,18 +39,18 @@ def get_navigation_train_cfg(exp_name, max_iterations):
     return {
         "algorithm": {
             "class_name": "PPO",
-            "clip_param": 0.14112594271747939,
+            "clip_param": 0.2,
             "desired_kl": 0.01,
-            "entropy_coef": 0.09847227294970444,
-            "gamma": 0.9821749211289272,
+            "entropy_coef": 0.01,
+            "gamma": 0.99,
             "lam": 0.95,
-            "learning_rate": 9.603951203562604e-05,
+            "learning_rate": 0.001,
             "max_grad_norm": 0.5,
             "num_learning_epochs": 8,
             "num_mini_batches": 4,
             "schedule": "adaptive",
             "use_clipped_value_loss": True,
-            "value_loss_coef": 2.5805037983234484,
+            "value_loss_coef": 1.0,
         },
         "policy": {
             "activation": "elu",
@@ -164,12 +165,14 @@ def get_navigation_cfgs(curriculum_stage=1):
         command_cfg["lin_vel_y_range"] = [0.0, 0.0]
         command_cfg["ang_vel_range"] = [0.0, 0.0]
 
-        reward_cfg["reward_scales"]["upright_posture"] = 1.0
-        reward_cfg["reward_scales"]["orientation_stability"] = 0.5
-        reward_cfg["reward_scales"]["similar_to_default"] = 0.01
-        reward_cfg["reward_scales"]["adaptive_base_height"] = 3.5
+        reward_cfg["reward_scales"]["upright_posture"] = 2.0
+        # reward_cfg["reward_scales"]["orientation_stability"] = -0.5
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.1
+        reward_cfg["reward_scales"]["adaptive_base_height"] = -50
 
-        env_cfg["episode_length_s"] = 10.0
+        reward_cfg["reward_scales"]["action_rate"] = -0.005
+        reward_cfg["reward_scales"]["lin_vel_z"] = -1.0
+        env_cfg["episode_length_s"] = 15.0
         env_cfg["use_obstacles"] = False
 
     elif curriculum_stage == 2:
@@ -183,8 +186,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["reward_scales"]["action_rate"] = 0.5              # Smooth gait
         reward_cfg["reward_scales"]["lin_vel_z"] = 1.0               # No bouncing
         reward_cfg["reward_scales"]["similar_to_default"] = 0.1       # Stay reasonable
-        reward_cfg["reward_scales"]["adaptive_base_height"] = 1.0
-        
+
         # Optional but helpful for better walking:
         reward_cfg["reward_scales"]["angular_velocity_stability"] = 0.5  # No spinning
         
@@ -193,7 +195,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         command_cfg["lin_vel_y_range"] = [0.0, 0.0]  # No lateral movement yet
         command_cfg["ang_vel_range"] = [0.0, 0.0]    # No turning yet
 
-        env_cfg["episode_length_s"] = 15.0
+        env_cfg["episode_length_s"] = 20.0
         env_cfg["use_obstacles"] = False
 
     elif curriculum_stage == 3:
@@ -217,7 +219,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         # Stage 5: Full navigation
         reward_cfg = {
             "jump_height_threshold": 0.08,
-            "base_height_target": 0.42,
+            "base_height_target": 0.37,
             "reward_scales": {
                 # Navigation-focused rewards
                 "tracking_lin_vel": 2.0,
@@ -252,6 +254,12 @@ def get_resume_train_cfg(exp_name, max_iterations, resume_path=None):
     })
     return cfg
 
+def ensure_exp_name_has_date(exp_name):
+    # Regex: 8 digits at end of string
+    if re.search(r'\d{8}$', exp_name):
+        return exp_name
+    else:
+        return f"{exp_name}_{datetime.now().strftime('%Y%m%d')}"
 
 def main():
     parser = argparse.ArgumentParser()
@@ -268,7 +276,9 @@ def main():
 
     gs.init(logging_level="warning")
     
-    log_dir = f"logs/{args.exp_name}_{datetime.now().strftime('%Y%m%d')}"
+    exp_name = ensure_exp_name_has_date(args.exp_name)
+
+    log_dir = f"logs/{exp_name}"
     if os.path.exists(log_dir) and not args.resume:
         shutil.rmtree(log_dir)
     os.makedirs(log_dir, exist_ok=True)

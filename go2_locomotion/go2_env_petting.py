@@ -28,7 +28,20 @@ class Go2PettingEnv(Go2BaseEnv):
             self._setup_scene(show_viewer)
             self._setup_robot()
             self._setup_buffers()
+            
+            # optional camera
+            if self.env_cfg.get("visualize_camera", True):
+                self.cam = self.scene.add_camera(
+                    # res=(960, 540),
+                    res=(1920, 1080),
+                    pos=(4.0, 0.0, 4.0),
+                    lookat=(0, 0, 1.0),
+                    fov=30,
+                    GUI=True
+                )
+
             self._build_scene_and_setup()
+
 
 
     # petting specific methods
@@ -141,10 +154,10 @@ class Go2PettingEnv(Go2BaseEnv):
             # Apply the velocity change
             self.base_lin_vel += downward_velocity * 0.1  # Gradual application
             
-            # Method 2: Slightly lower the robot height (simulates compression)
-            height_reduction = torch.zeros_like(self.base_pos[:, 2])
-            height_reduction[self.is_being_petted] = -0.03  # 3cm lower
-            self.base_pos[self.is_being_petted, 2] += height_reduction[self.is_being_petted] * 0.1
+            # # Method 2: Slightly lower the robot height (simulates compression)
+            # height_reduction = torch.zeros_like(self.base_pos[:, 2])
+            # height_reduction[self.is_being_petted] = -0.03  # 3cm lower
+            # self.base_pos[self.is_being_petted, 2] += height_reduction[self.is_being_petted] * 0.1
 
 
     def trigger_manual_petting(self, env_id=0, duration_steps=50):
@@ -181,7 +194,7 @@ class Go2PettingEnv(Go2BaseEnv):
         return stability_reward
     
 
-    def _reward_calm_behavior(self):
+    def _reward_calm_behavior(self):        # necessary? TODO
         """Reward for calm, gentle behavior when not being petted"""
         not_in_gesture = self.gesture_timer == 0
         
@@ -194,7 +207,7 @@ class Go2PettingEnv(Go2BaseEnv):
         return torch.where(not_in_gesture, calmness * 0.05, torch.zeros_like(calmness))
 
 
-    def _reward_flexible_height(self):
+    def _reward_flexible_height(self): # TODO gradient check
         """Petting-specific height control - allow sitting, lying"""
         base_height = self.base_pos[:, 2]
         
@@ -213,9 +226,7 @@ class Go2PettingEnv(Go2BaseEnv):
             target_height = 0.42
         
         height_error = torch.abs(base_height - target_height)
-        return -torch.where(height_error < tolerance, 
-                            height_error * 0.2,  # Very gentle penalty
-                            height_error * 1.0)  # Moderate penalty
+        return -torch.square(torch.clamp(height_error - tolerance, min=0.0)) * 2.0
     
     
     def _reward_no_fall(self):

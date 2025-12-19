@@ -15,7 +15,9 @@ import pickle
 import shutil
 import torch
 import numpy as np
-import datetime
+from datetime import datetime
+import re
+from tqdm import tqdm
 
 from importlib import metadata
 
@@ -66,7 +68,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
             "resume": False,
         },
         "num_steps_per_env": 32,  # Longer episodes for petting
-        "save_interval": 50,
+        "save_interval": 100,
         "empirical_normalization": None,
         "seed": 1, # set to different seeds for multiple runs
     }
@@ -132,14 +134,14 @@ def get_petting_cfgs():
             # Petting-focused rewards
             "petting_response": 3.0,        # High reward for gestures
             "petting_stability": 2.0,       # Stability during gestures
-            "calm_behavior": 1.0,           # Calm when not petted
+            "calm_behavior": 0,           # Calm when not petted
             "flexible_height": 1.0,         # Allow height variation
             
             # Very reduced base rewards
             "lin_vel_z": 0.3,              # Allow some jumping for gestures
             "action_rate": 0.1,            # Allow expressive movements
             "similar_to_default": 0.05,    # Allow gesture poses
-            "no_fall": 1.0,                 # Moderate penalty for falling
+            "no_fall": 0,                 # Moderate penalty for falling
         },
     }
     
@@ -215,6 +217,14 @@ def test_petting_manually():
             print(f"Step {step}: Reward={rewards[0]:.3f}, Gesture={(env.gesture_timer[0] > 0).item()}")
 
 
+def ensure_exp_name_has_date(exp_name):
+    # Regex: 8 digits at end of string
+    if re.search(r'\d{8}$', exp_name):
+        return exp_name
+    else:
+        return f"{exp_name}_{datetime.now().strftime('%Y%m%d')}"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="go2-petting")
@@ -226,9 +236,11 @@ def main():
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
-    
-    log_dir = f"logs/{args.exp_name}"
-    if os.path.exists(log_dir):
+
+    exp_name = ensure_exp_name_has_date(args.exp_name)
+    log_dir = f"logs/{exp_name}"
+
+    if os.path.exists(log_dir) and not args.resume:
         shutil.rmtree(log_dir)
     os.makedirs(log_dir, exist_ok=True)
 
@@ -264,7 +276,7 @@ def main():
 
     # Save configs
     pickle.dump([env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg],
-                open(f"{log_dir}_{datetime.datetime.now().strftime('%Y%m%d')}/cfgs.pkl", "wb"))                      # add datetime to distinguish runs
+                open(f"{log_dir}/cfgs.pkl", "wb"))                      # add datetime to distinguish runs
 
     # Create PETTING environment
     env = Go2PettingEnv(
@@ -292,8 +304,26 @@ def main():
             print(f"🔄 Resuming from latest checkpoint: {resume_path}")
             runner.load(resume_path)
             
-    runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
+    # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
+    with tqdm(total=args.max_iterations, desc="Training Progress") as pbar:
+        for iteration in range(args.max_iterations):
+            runner.learn(num_learning_iterations=1, init_at_random_ep_len=True)
+            pbar.update(1)
+
+            if (iteration +1) % train_cfg["runner"]["log_interval"] == 0:
+                checkpoint_path = f"{log_dir}/model_{iteration +1}.pt"
+                runner.save(checkpoint_path)
+                env_config_path = f"{log_dir}/env_cfg_{iteration + 1}.pkl"
+                with open(env_config_path, 'wb') as f:
+                    pickle.dump(env_cfg, f)
+
+    final_checkpoint = f"{log_dir}/model_final.pt"
+    final_env_config = f"{log_dir}/env_cfg_final.pkl"
+    
+    runner.save(final_checkpoint)
+    with open(final_env_config, 'wb') as f:
+        pickle.dump(env_cfg, f)
 
 if __name__ == "__main__":
     main()
