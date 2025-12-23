@@ -29,5 +29,6 @@ thesis/figures/
 *.fdb_latexmk
 *.fls
 *.pdf
+*.mp4
 
 thesis.synctex.gz
