@@ -25,12 +25,15 @@ class Go2PettingEnv(Go2BaseEnv):
             self.is_being_petted = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
             self.petting_duration = env_cfg.get('petting_duration', 50)  # Duration of petting force application (1s at 50Hz)
 
+            self.manual_petting_active = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+            self.manual_petting_timer = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
+
             self._setup_scene(show_viewer)
             self._setup_robot()
             self._setup_buffers()
             
             # optional camera
-            if self.env_cfg.get("visualize_camera", True):
+            if self.env_cfg.get("visualize_camera", False):
                 self.cam = self.scene.add_camera(
                     # res=(960, 540),
                     res=(1920, 1080),
@@ -42,6 +45,22 @@ class Go2PettingEnv(Go2BaseEnv):
 
             self._build_scene_and_setup()
 
+
+    def _setup_buffers(self):
+        super()._setup_buffers()
+        # Estimate head position when standing still (base_pos + offset)
+        head_offset = torch.tensor([0.0, 0.0, 0.15], device=self.device)
+        self.head_pos_standing = self.base_pos + head_offset
+        self.petting_force_fields = [
+            gs.force_fields.Point(
+                strength=1.0,
+                position=self.head_pos_standing[i].cpu().numpy(),
+                falloff_pow=1.0
+            )
+            for i in range(self.num_envs)
+        ]
+        for ff in self.petting_force_fields:
+            self.scene.add_force_field(ff)
 
 
     # petting specific methods
@@ -86,9 +105,7 @@ class Go2PettingEnv(Go2BaseEnv):
 
     def _check_head_petting(self):
         """Checking for head petting gestures."""
-        pressure_touches = self._detect_head_pressure()
-        
-        self.head_touched = pressure_touches
+        self.head_touched = self._detect_head_pressure()
 
         # Start gesture timer and cooldown for touched environments
         touched_envs = self.head_touched
@@ -105,7 +122,7 @@ class Go2PettingEnv(Go2BaseEnv):
         gesture_actions = torch.zeros_like(self.actions)
         
         # Create gentle wave pattern
-        wave_phase = (self.gesture_timer.float() / 20.0) % (2 * 3.14159)
+        wave_phase = (self.gesture_timer.float() / 20.0) % (2 * torch.pi)
         wave_amplitude = 0.3
         
         # Gentle "happy" front leg movement (like excited stepping)
@@ -143,38 +160,31 @@ class Go2PettingEnv(Go2BaseEnv):
             torch.full_like(self.petting_force_timer, self.petting_duration),
             torch.clamp(self.petting_force_timer - 1, 0, self.petting_duration)
         )
-        
+
         self.is_being_petted = self.petting_force_timer > 0
-        
+        petted_envs = self.is_being_petted.nonzero(as_tuple=False).flatten()
+
         if self.is_being_petted.any():
-            # Method 1: Modify base velocity directly (simulates gentle pressure)
-            downward_velocity = torch.zeros_like(self.base_lin_vel)
-            downward_velocity[self.is_being_petted, 2] = -0.12  # 0.12 m/s downward
-            
-            # Apply the velocity change
-            self.base_lin_vel += downward_velocity * 0.1  # Gradual application
-            
-            # # Method 2: Slightly lower the robot height (simulates compression)
-            # height_reduction = torch.zeros_like(self.base_pos[:, 2])
-            # height_reduction[self.is_being_petted] = -0.03  # 3cm lower
-            # self.base_pos[self.is_being_petted, 2] += height_reduction[self.is_being_petted] * 0.1
+            for env_id in petted_envs:
+                self.petting_force_fields[env_id].activate()
+
+
 
 
     def trigger_manual_petting(self, env_id=0, duration_steps=50):
         """Externally trigger petting for specific environments (for testing)"""
         if env_id < self.num_envs:
-            self.petting_force_timer[env_id] = duration_steps
-            self.is_being_petted[env_id] = True
+            self.manual_petting_timer[env_id] = duration_steps
+            self.manual_petting_active[env_id] = True
 
     # Reward functions for petting
     def _reward_petting_response(self):
         """Reward for appropriate gesture response to petting"""
-        gesture_reward = torch.where(
-            self.gesture_timer > 0,
-            torch.full_like(self.head_touched, 0.2, dtype=torch.float),
-            torch.zeros_like(self.head_touched, dtype=torch.float)
-        )
-        return gesture_reward
+        gesture_active = self.gesture_timer > 0
+        # Example: reward for high joint velocity (movement) during gesture
+        movement = torch.norm(self.dof_vel, dim=1)
+        is_moving = movement > 0.1  # adjust threshold as needed
+        return torch.where(gesture_active & is_moving, torch.full_like(movement, 1.0), torch.zeros_like(movement))
 
 
     def _reward_petting_stability(self):
@@ -184,27 +194,11 @@ class Go2PettingEnv(Go2BaseEnv):
         height_deviation = torch.abs(self.base_pos[:, 2] - self.reward_cfg.get('base_height_target', 0.35))
         
         stability = torch.exp(-(ang_vel_magnitude + height_deviation * 5))
-        
-        stability_reward = torch.where(
-            self.gesture_timer > 0,
-            stability * 0.1,
-            torch.zeros_like(stability)
-        )
+
+        gesture_active = (self.gesture_timer.float() / self.gesture_duration).clamp(0, 1)
+        stability_reward = stability * 0.1 * gesture_active
         
         return stability_reward
-    
-
-    def _reward_calm_behavior(self):        # necessary? TODO
-        """Reward for calm, gentle behavior when not being petted"""
-        not_in_gesture = self.gesture_timer == 0
-        
-        # Reward low movement when not in gesture
-        movement_penalty = torch.norm(self.base_lin_vel, dim=1)
-        angular_penalty = torch.norm(self.base_ang_vel, dim=1)
-        
-        calmness = torch.exp(-(movement_penalty + angular_penalty))
-        
-        return torch.where(not_in_gesture, calmness * 0.05, torch.zeros_like(calmness))
 
 
     def _reward_flexible_height(self): # TODO gradient check
@@ -240,11 +234,38 @@ class Go2PettingEnv(Go2BaseEnv):
 
     def step(self, actions):
         """Petting-specific step logic"""
-        # Apply random petting forces
-        self._apply_random_petting_forces()
+        if self.manual_petting_active.any():
+            # Decrease manual petting timers
+            self.manual_petting_timer = torch.clamp(self.manual_petting_timer - 1, 0, None)
+            active_envs = self.manual_petting_active & (self.manual_petting_timer > 0)
+            self.is_being_petted = active_envs | self.is_being_petted
+            self.head_touched = active_envs | self.head_touched
+            # Update active status
+            self.manual_petting_active = self.manual_petting_active & (self.manual_petting_timer > 0)
 
-        # Check for head petting
-        self._check_head_petting()
+            no_longer_petted = (self.manual_petting_active == False) & (self.manual_petting_timer == 0)
+            if no_longer_petted.any():
+                for env_id in self.petting_force_fields:
+                    self.petting_force_fields[env_id].deactivate()
+                self.manual_petting_active[no_longer_petted] = False
+            # Apply manual petting effects
+            if self.manual_petting_active.any():
+                for env_id in self.petting_force_fields:
+                    self.petting_force_fields[env_id].activate()
+        else:
+            # Apply random petting forces
+            self._apply_random_petting_forces()
+            
+            # After updating self.petting_force_timer
+            no_longer_petted = (self.petting_force_timer == 0) & self.is_being_petted
+            if no_longer_petted.any():
+                for env_id in self.petting_force_fields:
+                    self.petting_force_fields[env_id].deactivate()
+
+                self.is_being_petted[no_longer_petted] = False
+
+            # Check for head petting
+            self._check_head_petting()
         
         # Override actions if gesture is active
         active_gesture = self.gesture_timer > 0

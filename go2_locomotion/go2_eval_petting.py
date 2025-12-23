@@ -114,9 +114,10 @@ def main():
     obs, _ = env.reset()
     with torch.no_grad():
         if args.record:
-            print("🎥 Recording video...")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 env.cam.start_recording()
+
+            print("🎥 Recording video...")
         
         with tqdm(total=max_sim_step, 
                 desc="🐕 Evaluating Petting", 
@@ -132,6 +133,7 @@ def main():
                     if step % args.petting_interval == 0:
                         manual_petting_timer = args.petting_duration
                         petting_events += 1
+                        env.trigger_manual_petting(env_id=0, duration_steps=manual_petting_timer)
                         if not args.silent:
                             print(f"🖐️ Manual petting started at step {step} for {args.petting_duration} steps")
                     
@@ -144,6 +146,7 @@ def main():
 
                 actions = policy(obs)
                 obs, rews, dones, infos = env.step(actions)
+                env.cam.render()
                 
                 reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
                 if len(reset_idx) > 0:

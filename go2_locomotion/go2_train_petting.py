@@ -43,7 +43,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
             "class_name": "PPO",
             "clip_param": 0.2,
             "desired_kl": 0.01,
-            "entropy_coef": 0.1,
+            "entropy_coef": 0.01,
             "gamma": 0.99,
             "lam": 0.95,
             "learning_rate": 3e-4,
@@ -64,7 +64,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
         "runner": {
             "experiment_name": exp_name,
             "max_iterations": max_iterations,
-            "log_interval": 1,
+            "log_interval": 100,
             "record_interval": 25,
             "resume": False,
         },
@@ -117,6 +117,9 @@ def get_petting_cfgs():
 
         'petting_probability': 0.1,  # 10% chance to start petting each step
         'petting_duration': 50,  # Duration of petting force application (1s at 50Hz)
+
+        # camera visualization
+        "visualize_camera": True,
     }
     
     obs_cfg = {
@@ -130,10 +133,10 @@ def get_petting_cfgs():
     }
     
     reward_cfg = {
-        "base_height_target": 0.35,  # Slightly lower for petting
+        "base_height_target": 0.37,  # Slightly lower for petting
         "reward_scales": {
             # Petting-focused rewards
-            "petting_response": 3.0,        # High reward for gestures
+            "petting_response": 5.0,        # High reward for gestures
             "petting_stability": 2.0,       # Stability during gestures
             "calm_behavior": 0,           # Calm when not petted
             "flexible_height": 1.0,         # Allow height variation
@@ -310,21 +313,18 @@ def main():
     with tqdm(total=args.max_iterations, desc="Training Progress") as pbar:
         for iteration in range(args.max_iterations):
             runner.learn(num_learning_iterations=1, init_at_random_ep_len=True)
+            runner.writer.flush()
             pbar.update(1)
 
             if (iteration +1) % train_cfg["runner"]["log_interval"] == 0:
                 checkpoint_path = f"{log_dir}/model_{iteration +1}.pt"
                 runner.save(checkpoint_path)
-                env_config_path = f"{log_dir}/env_cfg_{iteration + 1}.pkl"
-                with open(env_config_path, 'wb') as f:
-                    pickle.dump(env_cfg, f)
 
     final_checkpoint = f"{log_dir}/model_final.pt"
-    final_env_config = f"{log_dir}/env_cfg_final.pkl"
+    # final_env_config = f"{log_dir}/env_cfg_final.pkl"
     
     runner.save(final_checkpoint)
-    with open(final_env_config, 'wb') as f:
-        pickle.dump(env_cfg, f)
+
 
 if __name__ == "__main__":
     main()
