@@ -30,5 +30,8 @@ thesis/figures/
 *.fls
 *.pdf
 *.mp4
+*.xmpi
+*.xmpdata
+*.bst
 
 thesis.synctex.gz
