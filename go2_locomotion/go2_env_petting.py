@@ -53,7 +53,7 @@ class Go2PettingEnv(Go2BaseEnv):
         self.head_pos_standing = self.base_pos + head_offset
         self.petting_force_fields = [
             gs.force_fields.Point(
-                strength=1.0,
+                strength=10.0,
                 position=self.head_pos_standing[i].cpu().numpy(),
                 falloff_pow=1.0
             )
@@ -165,7 +165,7 @@ class Go2PettingEnv(Go2BaseEnv):
         petted_envs = self.is_being_petted.nonzero(as_tuple=False).flatten()
 
         if self.is_being_petted.any():
-            for env_id in petted_envs:
+            for env_id in range(len(self.petting_force_fields)):
                 self.petting_force_fields[env_id].activate()
 
 
@@ -245,12 +245,12 @@ class Go2PettingEnv(Go2BaseEnv):
 
             no_longer_petted = (self.manual_petting_active == False) & (self.manual_petting_timer == 0)
             if no_longer_petted.any():
-                for env_id in self.petting_force_fields:
+                for env_id in range(len(self.petting_force_fields)):
                     self.petting_force_fields[env_id].deactivate()
                 self.manual_petting_active[no_longer_petted] = False
             # Apply manual petting effects
             if self.manual_petting_active.any():
-                for env_id in self.petting_force_fields:
+                for env_id in range(len(self.petting_force_fields)):
                     self.petting_force_fields[env_id].activate()
         else:
             # Apply random petting forces
@@ -259,7 +259,7 @@ class Go2PettingEnv(Go2BaseEnv):
             # After updating self.petting_force_timer
             no_longer_petted = (self.petting_force_timer == 0) & self.is_being_petted
             if no_longer_petted.any():
-                for env_id in self.petting_force_fields:
+                for env_id in range(len(self.petting_force_fields)):
                     self.petting_force_fields[env_id].deactivate()
 
                 self.is_being_petted[no_longer_petted] = False

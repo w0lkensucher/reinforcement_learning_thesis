@@ -46,7 +46,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
             "entropy_coef": 0.01,
             "gamma": 0.99,
             "lam": 0.95,
-            "learning_rate": 3e-4,
+            "learning_rate": 2e-4,
             "max_grad_norm": 1.0,
             "num_learning_epochs": 10,
             "num_mini_batches": 4,
@@ -64,14 +64,14 @@ def get_petting_train_cfg(exp_name, max_iterations):
         "runner": {
             "experiment_name": exp_name,
             "max_iterations": max_iterations,
-            "log_interval": 100,
+            "log_interval": 1,
             "record_interval": 25,
             "resume": False,
         },
         "num_steps_per_env": 32,  # Longer episodes for petting
         "save_interval": 100,
         "empirical_normalization": None,
-        "seed": 1, # set to different seeds for multiple runs
+        "seed": 8, # set to different seeds for multiple runs
     }
 
 
@@ -138,12 +138,11 @@ def get_petting_cfgs():
             # Petting-focused rewards
             "petting_response": 5.0,        # High reward for gestures
             "petting_stability": 2.0,       # Stability during gestures
-            "calm_behavior": 0,           # Calm when not petted
             "flexible_height": 1.0,         # Allow height variation
             
             # Very reduced base rewards
             "lin_vel_z": 0.3,              # Allow some jumping for gestures
-            "action_rate": 0.1,            # Allow expressive movements
+            "action_rate": 0.01,            # Allow expressive movements
             "similar_to_default": 0.05,    # Allow gesture poses
             "no_fall": 0,                 # Moderate penalty for falling
         },
@@ -246,7 +245,10 @@ def main():
 
     if os.path.exists(log_dir) and not args.resume:
         shutil.rmtree(log_dir)
-    os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(log_dir, exist_ok=True)
+        
+    elif not args.resume:
+        os.makedirs(log_dir, exist_ok=True)
 
     env_cfg, obs_cfg, reward_cfg, command_cfg = get_petting_cfgs()
     train_cfg = get_petting_train_cfg(args.exp_name, args.max_iterations)
@@ -316,7 +318,7 @@ def main():
             runner.writer.flush()
             pbar.update(1)
 
-            if (iteration +1) % train_cfg["runner"]["log_interval"] == 0:
+            if (iteration +1) % train_cfg["save_interval"] == 0:
                 checkpoint_path = f"{log_dir}/model_{iteration +1}.pt"
                 runner.save(checkpoint_path)
 
