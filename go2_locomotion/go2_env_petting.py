@@ -10,9 +10,9 @@ class Go2PettingEnv(Go2BaseEnv):
 
             self.head_touched = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
             self.gesture_timer = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
-            self.gesture_duration = 100  # 2 seconds at 50Hz
+            self.gesture_duration = 20  # .4 seconds at 50Hz
             self.gesture_cooldown = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
-            self.cooldown_duration = 250  # 5 seconds cooldown
+            self.cooldown_duration = 20  # .4 seconds cooldown
 
             # Detection parameters
             self.gentle_speed_threshold = env_cfg.get('gentle_speed_threshold', 0.3)  # Must be moving slowly
@@ -30,77 +30,118 @@ class Go2PettingEnv(Go2BaseEnv):
 
             self._setup_scene(show_viewer)
             self._setup_robot()
+            self._setup_petting_hands()  # Add hands AFTER robot to avoid DOF index shifting
             self._setup_buffers()
-            
-            # optional camera
-            if self.env_cfg.get("visualize_camera", False):
-                self.cam = self.scene.add_camera(
-                    # res=(960, 540),
-                    res=(1920, 1080),
-                    pos=(4.0, 0.0, 4.0),
-                    lookat=(0, 0, 1.0),
-                    fov=30,
-                    GUI=True
-                )
-
             self._build_scene_and_setup()
+
+
+    def _setup_scene(self, show_viewer=False):
+        """Override to add optional camera to the scene"""
+        super()._setup_scene(show_viewer)
+        # Note: Petting hands are added AFTER robot in __init__ to preserve DOF indices
+        
+        # Add optional camera BEFORE scene.build()
+        if self.env_cfg.get("visualize_camera", False):
+            self.cam = self.scene.add_camera(
+                # res=(960, 540),
+                res=(1920, 1080),
+                pos=(4.0, 0.0, 4.0),
+                lookat=(0, 0, 1.0),
+                fov=30,
+                GUI=True
+            )
 
 
     def _setup_buffers(self):
         super()._setup_buffers()
-        # Estimate head position when standing still (base_pos + offset)
-        head_offset = torch.tensor([0.0, 0.0, 0.15], device=self.device)
-        self.head_pos_standing = self.base_pos + head_offset
-        self.petting_force_fields = [
-            gs.force_fields.Point(
-                strength=10.0,
-                position=self.head_pos_standing[i].cpu().numpy(),
-                falloff_pow=1.0
-            )
-            for i in range(self.num_envs)
-        ]
-        for ff in self.petting_force_fields:
-            self.scene.add_force_field(ff)
+        
+        # Add link contact forces buffer for head pressure detection
+        self.link_contact_forces = torch.zeros(
+            (self.num_envs, self.robot.n_links, 3), device=self.device, dtype=gs.tc_float
+        )
+        
+        # Find head link index for contact detection
+        # Note: With default merge_fixed_links, Head_lower is merged into base
+        self.head_link_index = None
+        for link in self.robot.links:
+            if link.name == "Head_lower":
+                self.head_link_index = link.idx - self.robot.link_start
+                print(f"✓ Using Head_lower link for head contact detection at index {self.head_link_index}")
+                break
+            elif link.name == "base":
+                self.head_link_index = link.idx - self.robot.link_start
+                print(f"✓ Using base link for head contact detection at index {self.head_link_index} (Head_lower merged)")
+                break
+        
+        if self.head_link_index is None:
+            print("ERROR: Head_lower link not found! Check URDF and links_to_keep config!")
+            self.head_link_index = 0  # Fallback
+
+
+    def _setup_petting_hands(self):
+        """Setup physical hand collision objects for realistic petting contact simulation"""
+        # Create ONE hand entity - Genesis automatically creates one instance per environment
+        self.petting_hand = self.scene.add_entity(
+            morph=gs.morphs.Sphere(
+                radius=0.05,  # 5cm radius hand
+                pos=(0.0, 0.0, 1.0),  # Temporary position, will update later
+                fixed=False,  # Allow it to move
+            ),
+            material=gs.materials.Rigid(
+                rho=100.0,  # Low density so it doesn't crush the robot
+                friction=0.5,
+            ),
+            vis_mode='visual',
+        )
+        
+        # Petting parameters
+        self.hand_rest_height = 0.5  # Height above head when not petting
+        self.hand_petting_height = 0.02  # Height above head when petting (slight contact)
 
 
     # petting specific methods
     def _detect_head_pressure(self):
-            # Normal target height
-            target_height = self.reward_cfg.get("base_height_target", 0.35)
-            current_height = self.base_pos[:, 2]
-            
-            # Calculate height reduction from normal
-            height_reduction = target_height - current_height
-            
-            # Get vertical velocity (negative = being pushed down)
-            vertical_velocity = self.base_lin_vel[:, 2]
-            gentle_downward_vel = -vertical_velocity  # Positive = being pushed down
-            
-            # Conditions for gentle head pressure:
-            # 1. Height slightly reduced (2-8cm below normal)
-            gentle_height_reduction = (height_reduction >= self.gentle_press_range[0]) & (height_reduction <= self.gentle_press_range[1])
-            
-            # 2. Gentle downward velocity (being pressed down)
-            gentle_downward_pressure = gentle_downward_vel > self.gentle_vel_threshold
-            
-            # 3. Robot relatively stationary (not jumping/falling)
-            robot_speed = torch.norm(self.base_lin_vel[:, :2], dim=1)
-            is_stationary = robot_speed < self.gentle_speed_threshold
-            
-            # 4. Not in cooldown
-            not_in_cooldown = self.gesture_cooldown == 0
-            
-            # 5. Robot relatively stable (not tilted)
-            roll_pitch_magnitude = torch.norm(self.base_radians[:, :2], dim=1)
-            is_stable = roll_pitch_magnitude < 10.0  # Less than 10 degrees tilt
-            
-            pressure_touch = (gentle_height_reduction & 
-                            gentle_downward_pressure & 
-                            is_stationary & 
-                            not_in_cooldown & 
-                            is_stable)
-            
-            return pressure_touch
+        """Detect gentle pressure on the head using contact forces on base link (where Head_lower is merged)"""
+        if self.head_link_index is None:
+            return torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        
+        # Get contact force on the base link (Head_lower merged into base)
+        head_contact_force = self.link_contact_forces[:, self.head_link_index, :]  # Shape: [num_envs, 3]
+        head_force_z = -head_contact_force[:, 2]  # Downward force (negative z is down)
+        
+        # # DEBUG: Print force values when petting is active
+        # if self.is_being_petted.any():
+        #     petted_envs = self.is_being_petted.nonzero(as_tuple=False).flatten()
+        #     for env_id in petted_envs[:1]:  # Only print first petted env
+        #         print(f"Env {env_id}: Head contact force = {head_contact_force[env_id].cpu().numpy()}, "
+        #               f"Z-force = {head_force_z[env_id].item():.2f}N")
+        
+        # Since Head_lower is merged into base, filter out ground/body contact
+        # Conditions for gentle head petting:
+        # 1. Downward force in gentle range (2N to 15N)
+        gentle_force = (head_force_z > 2.0) & (head_force_z < 15.0)
+        
+        # 2. Robot relatively stationary (not running around)
+        robot_speed = torch.norm(self.base_lin_vel[:, :2], dim=1)
+        is_stationary = robot_speed < self.gentle_speed_threshold
+        
+        # 3. Not in cooldown
+        not_in_cooldown = self.gesture_cooldown == 0
+        
+        # 4. Robot relatively stable (not tilted/falling)
+        roll_pitch_magnitude = torch.norm(self.base_radians[:, :2], dim=1)
+        is_stable = roll_pitch_magnitude < 0.17  # Less than ~10 degrees tilt
+        
+        # 5. Robot at reasonable height (not on ground)
+        at_standing_height = self.base_pos[:, 2] > 0.25
+        
+        pressure_touch = (gentle_force & 
+                        is_stationary & 
+                        not_in_cooldown & 
+                        is_stable &
+                        at_standing_height)
+        
+        return pressure_touch
     
 
     def _check_head_petting(self):
@@ -143,12 +184,47 @@ class Go2PettingEnv(Go2BaseEnv):
         gesture_actions[:, 9] = -tail_wag   # RR_hip (opposite direction)
         gesture_actions[:, 10] = 1.0        # RR_thigh (stable)
         gesture_actions[:, 11] = -1.5       # RR_calf (stable)
-        
+
+        # Transition back to default pose in the last N steps of the gesture
+        transition_steps = 20  # Number of steps for smooth return
+        ending = (self.gesture_timer > 0) & (self.gesture_timer <= transition_steps)
+        blend_factor = (self.gesture_timer.float() / transition_steps).clamp(0, 1).unsqueeze(1)  # Shape: [num_envs, 1]
+
+        # Default pose (from self.default_dof_pos)
+        default_pose = self.default_dof_pos.unsqueeze(0).expand_as(gesture_actions)
+
+        # Blend gesture_actions towards default pose for ending gestures
+        gesture_actions = torch.where(
+            ending.unsqueeze(1),
+            gesture_actions * blend_factor + default_pose * (1 - blend_factor),
+            gesture_actions
+        )
+
         return gesture_actions
 
 
+    def _move_hand_to_position(self, env_id, target_pos):
+        """Helper function to move hand sphere to target position using qpos
+        
+        Args:
+            env_id: Environment index
+            target_pos: 3D position tensor [x, y, z]
+        """
+        # Set hand position using qpos (7-vector: xyz + quaternion wxyz)
+        # For FREE joint: [x, y, z, quat_w, quat_x, quat_y, quat_z]
+        identity_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device)
+        qpos = torch.cat([target_pos, identity_quat])  # Shape: [7]
+        
+        # Specify which environment to update (single entity, multiple instances)
+        self.petting_hand.set_qpos(
+            qpos, 
+            envs_idx=[env_id], 
+            zero_velocity=False
+        )
+
+
     def _apply_random_petting_forces(self):
-        """Apply random petting forces using the petting objects"""
+        """Apply random petting by moving hand colliders down to touch the head"""
         # Random chance of starting new petting interaction
         start_petting = (torch.rand(self.num_envs, device=self.device) < self.petting_probability) & \
                        (self.petting_force_timer == 0) & \
@@ -162,11 +238,39 @@ class Go2PettingEnv(Go2BaseEnv):
         )
 
         self.is_being_petted = self.petting_force_timer > 0
-        petted_envs = self.is_being_petted.nonzero(as_tuple=False).flatten()
+        
+        # Move hands down for petting, up when not petting
+        for env_id in range(self.num_envs):
+            current_head_pos = self.base_pos[env_id] + torch.tensor([0.0, 0.0, 0.15], device=self.device)
+            
+            if self.is_being_petted[env_id]:
+                # Lower hand to make contact with head
+                target_pos = current_head_pos + torch.tensor([0.0, 0.0, self.hand_petting_height], device=self.device)
+            else:
+                # Raise hand above head
+                target_pos = current_head_pos + torch.tensor([0.0, 0.0, self.hand_rest_height], device=self.device)
+            
+            self._move_hand_to_position(env_id, target_pos)
 
-        if self.is_being_petted.any():
-            for env_id in range(len(self.petting_force_fields)):
-                self.petting_force_fields[env_id].activate()
+
+    def _apply_manual_petting(self):
+        """Apply manual petting (for testing/debugging)"""
+        # Decrease manual petting timers
+        self.manual_petting_timer = torch.clamp(self.manual_petting_timer - 1, 0, None)
+        active_envs = self.manual_petting_active & (self.manual_petting_timer > 0)
+        self.is_being_petted = active_envs
+        self.manual_petting_active = self.manual_petting_active & (self.manual_petting_timer > 0)
+
+        # Move hands for manual petting
+        for env_id in range(self.num_envs):
+            current_head_pos = self.base_pos[env_id] + torch.tensor([0.0, 0.0, 0.15], device=self.device)
+            
+            if self.is_being_petted[env_id]:
+                target_pos = current_head_pos + torch.tensor([0.0, 0.0, self.hand_petting_height], device=self.device)
+            else:
+                target_pos = current_head_pos + torch.tensor([0.0, 0.0, self.hand_rest_height], device=self.device)
+            
+            self._move_hand_to_position(env_id, target_pos)
 
 
 
@@ -176,6 +280,15 @@ class Go2PettingEnv(Go2BaseEnv):
         if env_id < self.num_envs:
             self.manual_petting_timer[env_id] = duration_steps
             self.manual_petting_active[env_id] = True
+
+    def _update_robot_state(self):
+        """Override to also update contact forces for head pressure detection"""
+        super()._update_robot_state()
+        # Update link contact forces
+        self.link_contact_forces[:] =  self.robot.get_links_net_contact_force().detach().clone().to(
+            device=self.device,
+            dtype=gs.tc_float
+            )
 
     # Reward functions for petting
     def _reward_petting_response(self):
@@ -220,7 +333,7 @@ class Go2PettingEnv(Go2BaseEnv):
             target_height = 0.42
         
         height_error = torch.abs(base_height - target_height)
-        return -torch.square(torch.clamp(height_error - tolerance, min=0.0)) * 2.0
+        return -torch.square(torch.clamp(height_error - tolerance, min=0.0))
     
     
     def _reward_no_fall(self):
@@ -235,34 +348,11 @@ class Go2PettingEnv(Go2BaseEnv):
     def step(self, actions):
         """Petting-specific step logic"""
         if self.manual_petting_active.any():
-            # Decrease manual petting timers
-            self.manual_petting_timer = torch.clamp(self.manual_petting_timer - 1, 0, None)
-            active_envs = self.manual_petting_active & (self.manual_petting_timer > 0)
-            self.is_being_petted = active_envs | self.is_being_petted
-            self.head_touched = active_envs | self.head_touched
-            # Update active status
-            self.manual_petting_active = self.manual_petting_active & (self.manual_petting_timer > 0)
-
-            no_longer_petted = (self.manual_petting_active == False) & (self.manual_petting_timer == 0)
-            if no_longer_petted.any():
-                for env_id in range(len(self.petting_force_fields)):
-                    self.petting_force_fields[env_id].deactivate()
-                self.manual_petting_active[no_longer_petted] = False
-            # Apply manual petting effects
-            if self.manual_petting_active.any():
-                for env_id in range(len(self.petting_force_fields)):
-                    self.petting_force_fields[env_id].activate()
+            # Apply manual petting (for testing/debugging)
+            self._apply_manual_petting()
         else:
-            # Apply random petting forces
+            # Apply random petting
             self._apply_random_petting_forces()
-            
-            # After updating self.petting_force_timer
-            no_longer_petted = (self.petting_force_timer == 0) & self.is_being_petted
-            if no_longer_petted.any():
-                for env_id in range(len(self.petting_force_fields)):
-                    self.petting_force_fields[env_id].deactivate()
-
-                self.is_being_petted[no_longer_petted] = False
 
             # Check for head petting
             self._check_head_petting()

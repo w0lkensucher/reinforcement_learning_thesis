@@ -138,12 +138,12 @@ def get_petting_cfgs():
             # Petting-focused rewards
             "petting_response": 5.0,        # High reward for gestures
             "petting_stability": 2.0,       # Stability during gestures
-            "flexible_height": 1.0,         # Allow height variation
+            "flexible_height": 2.0,         # Allow height variation
             
             # Very reduced base rewards
             "lin_vel_z": 0.3,              # Allow some jumping for gestures
-            "action_rate": 0.01,            # Allow expressive movements
-            "similar_to_default": 0.05,    # Allow gesture poses
+            "action_rate": 0.1,            # Allow expressive movements
+            "similar_to_default": 0.1,    # Allow gesture poses
             "no_fall": 0,                 # Moderate penalty for falling
         },
     }
@@ -309,23 +309,20 @@ def main():
             resume_path = os.path.join(log_dir, latest_model)
             print(f"🔄 Resuming from latest checkpoint: {resume_path}")
             runner.load(resume_path)
-            
-    # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
     with tqdm(total=args.max_iterations, desc="Training Progress") as pbar:
-        for iteration in range(args.max_iterations):
-            runner.learn(num_learning_iterations=1, init_at_random_ep_len=True)
-            runner.writer.flush()
-            pbar.update(1)
+        # for iteration in range(args.max_iterations):
+        runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True, pbar=pbar)
+            # runner.writer.flush()
+            # pbar.update(1)
 
-            if (iteration +1) % train_cfg["save_interval"] == 0:
-                checkpoint_path = f"{log_dir}/model_{iteration +1}.pt"
-                runner.save(checkpoint_path)
+            # if (iteration + 1) % train_cfg["save_interval"] == 0:
+            #     checkpoint_path = f"{log_dir}/model_{iteration +1}.pt"
+            #     runner.save(checkpoint_path)
 
-    final_checkpoint = f"{log_dir}/model_final.pt"
-    # final_env_config = f"{log_dir}/env_cfg_final.pkl"
+    # final_checkpoint = f"{log_dir}/model_final.pt"
     
-    runner.save(final_checkpoint)
+    # runner.save(final_checkpoint)
 
 
 if __name__ == "__main__":
