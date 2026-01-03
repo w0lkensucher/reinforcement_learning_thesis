@@ -1,0 +1,19 @@
+\chapter{Einleitung}\label{ch:intro}
+
+\section{Motivation}
+In einigen Arbeiten (\cite{tang2024deepreinforcementlearningrobotics}, \cite{robotics2030122}, \cite{bussola2025guidedreinforcementlearningomnidirectional}) wird nahegelegt, dass mit steigender Systemkomplexität der Aufwand von herkömmlicher Steuerung und Regelung in Robotiksystemen steigt, weshalb sich die Frage stellt, ob es Methoden gibt, die für diverse Aufgabenstellungen innerhalb der Robotik geeigneter wären. Diese Aufgabenstellungen beinhalten unter anderem die Navigation und Verhaltenslernen von Robotern innerhalb eines vorgegebenen Aufgabenbereichs, welches mit klassischer Regelungstechnik zwar effektiver wäre, allerdings Kenntnisse über dessen Systemdynamik erfordert, die oftmals hochgradig nichtlinear sind (vgl. \cite{recht2018tourreinforcementlearningview}). Das führt dazu, dass der Aufwand einer Modellierung für diesen Fall den Nutzen übersteigt, auch wenn klassische regelungsbasierte Ansätze hinsichtlich Robustheit und Vorhersagbarkeit weiterhin Vorteile aufweisen.
+
+Deep Reinforcement Learning bietet hierfür einen vielversprechenden Ansatz, da es auf Basus von Sensordaten ohne explizite Modellierung direkt Policies zur Ausführung agilen Verhaltens erzeugt \cite{Hwangbo_2019} \cite{levine2016endtoendtrainingdeepvisuomotor}. Die zugrundeliegenden Belohnungsfunktionen werden während des Trainings maximiert, wodurch eine Aneignung von benötigten Fähigkeiten innerhalb einer Umgebung begünstigt wird. Dies kann entweder durch eine allgemeine, allumfassende Belohnungsfunktion geschehen (vgl. \cite{SILVER2021103535}), oder durch gezielte Gestaltung der Belohnungsfunktion zur Beeinflussung des Verhaltens (vgl. \cite{zhang2025orsoacceleratingrewarddesign}).
+
+Ziel der Arbeit ist es, dass ein vierbeiniger Roboter, spezifisch der Go2 Unitree \cite{Unitree2023}, mittels Deep Reinforcement Learning lernt, auf ein Streicheln am Kopf zu reagieren und verschiedene Hindernisse zu umgehen, sowohl durch einfaches, seitliches Ausweichen als auch durch ein Springen über das Hindernis. Dies wird durch eine Simulation innerhalb von Genesis \cite{Genesis}, einer physikalischen Simulationsplattform, erreicht, um damit die Portierung auf den realen Roboter zu ermöglichen. 
+
+\section{Aufgabenstellung}
+Da das Lernen von Fähigkeiten primär durch Belohnungen geformt und bestimmt werden, stellt die korrekte Gestaltung und Parametrisierung von Belohnungsfunktionen, auf das in Abschnitt ??? näher eingegangen wird, den Schwerpunkt der Aufgaben dar. Die Herausforderung besteht darin, dass Trade-Offs explizit und implizit entstehen können, welche dementsprechend festzustellen und zu gewichten sind.
+
+Zusätzlich werden für die beiden Aufgaben zwei unterschiedliche Umgebungen benötigt, weshalb eine Identifizierung von den notwendigen Parametern und Belohnungsfunktionen für die jeweilige Arbeitsumgebung ebenfalls relevant ist. Ein weiterer Aspekt der Aufgabenstellung besteht darin, die trainierten Policies mittels Simulation als auch mit quantitativen Maßstäben zu evaluieren.
+
+\section{Aufbau der Arbeit}
+Diese Arbeit ist in ??? Kapitel gegliedert. % TODO: Aufbau der Arbeit
+
+\section{Abgrenzung der Aufgabenstellung}
+Deep Reinforcement Learning ermöglicht die Bearbeitung unterschiedlichster Aufgabenstellungen und entsprechender Lösungsansätze, weshalb sich bewusst in dieser Arbeit auf zwei Aufgabenbereiche und dessen Evaluierung innerhalb der Simulation beschränkt wird. Darüber hinaus ließ die Bearbeitungsdauer eine vollständige Portierung der Trainingsergebnisse  auf den Go2 Unitree innerhalb des vorgegebenen Zeitplans nicht zu. Die Portierung auf den Roboter kann jedoch als eigenständiger Untersuchungsbereich betrachtet werden und bietet Ansatzpunkte für zukünftige Arbeiten.

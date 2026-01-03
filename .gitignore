@@ -12,7 +12,6 @@ token.json
 train_from_script.py
 .env
 
-thesis/content/
 thesis/figures/
 
 *.aux
