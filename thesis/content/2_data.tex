@@ -10,22 +10,44 @@ Da die vorliegende Arbeit inhaltliche Parallelen zu bestehenden Forschungsansät
 % TODO: Unterabschnitte?
 Die Lokomotion ist einer der erfolgreichsten Einsatzbereiche für Deep Reinforcement Learning. Hwangbo et al. zeigen in \cite{Hwangbo_2019}, dass Bewegungsfähigkeiten für den ANYmal, einem vierbeinigen Roboter der ETH Zürich (vgl. \cite{7758092}), mithilfe von Deep Reinforcement Learning erlernt, die anschließend von der Simulation auf die Hardware übertragen werden.
 
+\subsection{Robuste Lokomotion durch Deep Reinforcement Learning}
 Zur Gelenkregelung werden Aktuatoren eingesetzt, deren Befehle mittels eines neuronalen Netzes berechnet werden \cite{Hwangbo_2019}. Die Trainingsdatensätze für das Netz bestehen aus realen Roboterdaten, welche sowohl den Verlauf der tatsächlichen Gelenkpositionen im Gegensatz zu angegebenen Positionen als auch die Gelenkgeschwindigkeiten enthält. Das trainierte Netz gibt das Drehmoment aus an den jeweiligen Drehgelenken. Verglichen mit idealisierten oder analytischen Modellen erzielt das Aktuatorennetzes signifikante Simulationsgenauigkeit.
 
 Die Robustheit der erlernten Policies in der Realität wird gewährleistet, indem beim Training des Aktuatorennetzes die Masse und Schwerpunkte zufällig variiert und die Eingabe der Gelenk- und Körpergeschwindigkeiten mit Rauschen versehen werden \cite{Hwangbo_2019}. Zudem wurde ein Curriculum, also ein Lernplan, implementiert, welches die Schwierigkeit der Aufgaben schrittweise steigert.
 
-Diese Policies wurden ohne Training auf der realen Hardware übertragen. Diese kann Befehlen für die Grundgeschwindigkeit genauer und energieeffizienter folgen, was anhand der geringeren Abweichung von Lineargeschwindigkeit (linear velocity) und Drehgeschwindigkeit der Hochachse (Yaw rate) beobachten werden kann \cite{Hwangbo_2019}. Für hohe Geschwindigkeiten erreicht der ANYmal mit den gelernten Policies eine Geschwindigkeit von $1,5\frac{m}{s}$, was der maximalen Geschwindigkeit des Roboters entspricht. Zusätzlich ist es möglich, dass der Roboter sich aus einer Sturzposition aufrichtet, welche mit früheren Regelungsmethoden kaum möglich war.
+Diese Policies wurden ohne gezieltes Training auf der realen Hardware übertragen. Diese kann Befehlen für die Grundgeschwindigkeit genauer und energieeffizienter folgen, was anhand der geringeren Abweichung von Lineargeschwindigkeit (linear velocity) und Drehgeschwindigkeit der Hochachse (Yaw rate) beobachten werden kann \cite{Hwangbo_2019}. Für hohe Geschwindigkeiten erreicht der ANYmal mit den gelernten Policies eine Geschwindigkeit von $1,5\frac{m}{s}$, was der maximalen Geschwindigkeit des Roboters entspricht. Zusätzlich ist es möglich, dass der Roboter sich aus einer Sturzposition aufrichtet, welche mit früheren Regelungsmethoden kaum möglich war.
+
+\par\vspace{1em}
 
 Während Hwangbo et al. den Schwerpunkt auf die robuste Übertragung einer einzelnen, leistungsfähigen Lokomotion-Policy von der Simulation auf reale Hardware legen, untersuchen Margolis und Agrawal die Frage, ob erlernte Policies nicht nur auf einen Aufgabenbereich anwendbar sind, sondern auch flexibel an unterschiedliche und zuvor unbekannte Umgebungen angepasst werden kann.
 
+\subsection{Dynamische und vielseitige Fortbewegungsfähigkeiten für quadrupede Lokomotion}
+
+\subsubsection{End-to-End Ansatz für die Fortbewegungsfähigkeit}
 In \cite{margolis2022walk} zeigen Margolis und Agrawal, dass eine verbesserte Generalisierung von gelernten Policies möglich und damit die Effektivität in bislang unbekannten Umgebungen erhöht werden kann. Das von den Autoren als Multiplicity of Behavior bezeichnete Konzept beschreibt eine Policy, welche Trainingsaufgaben auf unterschiedliche Weise lösen kann. Dies ist durch ein Training in einer vereinfachten Umgebung möglich, welche auf unbekannte, dynamische Umgebungen übertragbar ist, um ein Neutraining für spezifische Probleme zu vermeiden.
  
 Die Anpassung der Policy an unbekannte Umgebungen erfolgt durch einen Menschen im laufenden Betrieb, der einen achtdimensionalen Vektor $b_t$ für Verhaltensparameter steuert, um eine passende Laufstrategie zu finden \cite{margolis2022walk}. Mit dem Vektor werden Gangmuster, Körperhaltung und Fußbewegungen an das jeweilige Problem bzw. Terrain angepasst, und können so unter anderem das Überwinden von Treppen oder das Kriechen unter Hindernissen lernen.
 
+\par\vspace{1em}
+
 Diese Lernfähigkeit stellt einen wichtigen Schritt in Richtung robuster, generaliserungsfähiger Lokomotion dar. Gleichzeitig argumentiert Recht, dass eine direkte Steuerung aller Freiheitsgrade durch Deep Reinforcement Learning oft mit Herausforderungen hinsichtlich Stabilität und Sicherheit verbunden ist \cite{recht2018tourreinforcementlearningview}. Aus diesem Grund untersuchen zahlreiche Arbeiten hybride Ansätze, bei denen Deep Reinforcement Learning für hochrangige Entscheidungs- und Verhaltensparameter eingesetzt wird, während die eigentliche Körper- und Aktuatorregelung klassisch geregelt wird.
 
+\subsubsection{Hybrider Regelungsansatz für die Fortbewegungsfähigkeit}
 Yin et al. nutzen in \cite{9636805} diesen hybriden Ansatz, bei dem die Ansteuerung über eine sog. Whole-Body Control (WBC), sprich der Ganzkörperregelung, erfolgt. Durch die Berechnung der Drehmomente wird eine präzise Bewegungsverfolgung garantiert. Um zusätzlich noch das Gangmuster natürlicher zu gestalten, werden mit Deep Reinforcement Learning die Parameter für den Bewegungsstil generiert und der WBC zugeführt. 
 
-Das Training versucht aus gegebenen Motion-Capture-Clips (MoCap-Clips) von echten, vierbeinigen Tieren die Parameter für das gegebene Gangmuster zu extrahieren \cite{9636805}, und dabei anhand dieser Daten den Gang zu imitieren. Die Bewertung erfolgt hier mit einem Abgleich der Geschwindigkeitsauswertung von den Füßen zwischen dem Training und den MoCap-Clips.
+Das Training versucht aus gegebenen Motion-Capture-Clips (MoCap-Clips) von echten, vierbeinigen Tieren die Parameter für das gegebene Gangmuster zu extrahieren \cite{9636805}, und dabei anhand dieser Daten den Gang zu imitieren. Die Bewertung erfolgt hier durch einen Vergleich der Geschwindigkeit von den Füßen zwischen den erlernten Bewegungen und den MoCap-Clips, wobei eine hohe zeitliche Übereinstimmung erreicht wird.
 
-Diese untersuchte Generalisierungsfähigkeit ermöglicht daher eine Navigation in unbekannten Terrains. Hoeller et al. 
+\par\vspace{1em}
+
+Während diese Fortbewegungsfähigkeit auf dem Boden von vielen Arbeiten untersucht werden, existieren Problemstellungen, bei denen diese Anpassungsversuche auf ihre Grenzen stößt. Vor allem ein Höhenunterschied oder ein Hindernis, welches nicht durch Klettern überwindbar ist, kann durch einen gezielten Sprung überwunden werden. Bussola et al. untersuchen diese Aufgabenstellung und bedienen sich dabei ebenfalls eines hybriden Ansatzes \cite{bussola2025guidedreinforcementlearningomnidirectional}.
+ 
+% Arbeit von Bussola et al. zu Springen
+\subsubsection{Sprungfähigkeit für einen vierbeinigen Roboter}
+Die Arbeit von Bussola et al. stellt die Geh und Laufmanöver im Gegensatz zum Sprungmanöver, da die beim Laufen und Gehen der Roboter kontinuierlich mit den Boden interagiert, während beim Sprung die Sprungtrajektorie nach dem Absprung nicht mehr geändert werden kann \cite{bussola2025guidedreinforcementlearningomnidirectional}.
+Zusätzlich kommt die Landungsschwierigkeit hinzu, da eine Landung den Aufprall abfangen und das Umkippen des Roboters verhindert werden soll.
+
+Neben den Schwierigkeiten, die mit der Aufgabe einhergehen, hat der Roboter inhärente Steuerungsbeschränkungen. Die Optimierung des Absprungs muss unter anderem die dynamische Beschränkung der Gelenkposition, Gelenkgeschwindigkeits- und Drehmomentsgrenzen berücksichtigen, die Empfindlichkeit der Trajektorienplanung gegenüber Fehlern und die beschränkte Echtzeitberechnung, die bei einer hohen Frequenz kontinuierlich durchgeführt werden muss und umfangreiches Wissen über das System und dessen Parameter erfordert \cite{bussola2025guidedreinforcementlearningomnidirectional}.
+
+Ähnlich wie von Recht \cite{recht2018tourreinforcementlearningview} festgestellt, weisen Bussola et al. darauf hin, dass reine End-to-End Deep Reinforcement Learning Ansätze zwar eine mögliche Alternative darstellen, allerdings hohe Varianz aufweisen, welches die Sicherheit negativ beeinträchtigt.
+
+Die Untersuchungen zu den verschiedenen Ansätzen der Navigation in schwierigem Gelände ermöglicht daher die Untersuchung von Navigationsansätzen mithilfe von Deep Reinforcement Learning. 
