@@ -1,4 +1,4 @@
-\chapter{Stand der Technik}\label{ch:basics_state_of_the_art}
+\chapter{Stand der Technik}\label{ch:state_of_the_art}
 
 % TODO; Reinforcement Learning und Policy Wiederholungen ersetzen
 
@@ -6,11 +6,11 @@ In der heutigen Robotik wird Deep Reinforcement Learning benutzt, um hochentwick
 
 Da die vorliegende Arbeit inhaltliche Parallelen zu bestehenden Forschungsansätzen aufweist, wird zunächst der Stand der Technik näher dargestellt. Die zum Verständnis dieser Arbeit erforderlichen theoretischen Grundlagen werden anschließend erläutert, während Grundbegriffe im Glossar zusammengefasst sind. % TODO: label bei Glossar
 
-\section{Deep Reinforcement Learning in der Lokomotion sowie der Navigation}
+\section{Deep Reinforcement Learning in der Lokomotion}
 % TODO: Unterabschnitte?
+\subsection{Robuste Lokomotion durch Deep Reinforcement Learning}
 Die Lokomotion ist einer der erfolgreichsten Einsatzbereiche für Deep Reinforcement Learning. Hwangbo et al. zeigen in \cite{Hwangbo_2019}, dass Bewegungsfähigkeiten für den ANYmal, einem vierbeinigen Roboter der ETH Zürich (vgl. \cite{7758092}), mithilfe von Deep Reinforcement Learning erlernt, die anschließend von der Simulation auf die Hardware übertragen werden.
 
-\subsection{Robuste Lokomotion durch Deep Reinforcement Learning}
 Zur Gelenkregelung werden Aktuatoren eingesetzt, deren Befehle mittels eines neuronalen Netzes berechnet werden \cite{Hwangbo_2019}. Die Trainingsdatensätze für das Netz bestehen aus realen Roboterdaten, welche sowohl den Verlauf der tatsächlichen Gelenkpositionen im Gegensatz zu angegebenen Positionen als auch die Gelenkgeschwindigkeiten enthält. Das trainierte Netz gibt das Drehmoment aus an den jeweiligen Drehgelenken. Verglichen mit idealisierten oder analytischen Modellen erzielt das Aktuatorennetzes signifikante Simulationsgenauigkeit.
 
 Die Robustheit der erlernten Policies in der Realität wird gewährleistet, indem beim Training des Aktuatorennetzes die Masse und Schwerpunkte zufällig variiert und die Eingabe der Gelenk- und Körpergeschwindigkeiten mit Rauschen versehen werden \cite{Hwangbo_2019}. Zudem wurde ein Curriculum, also ein Lernplan, implementiert, welches die Schwierigkeit der Aufgaben schrittweise steigert.
@@ -21,7 +21,7 @@ Diese Policies wurden ohne gezieltes Training auf der realen Hardware übertrage
 
 Während Hwangbo et al. den Schwerpunkt auf die robuste Übertragung einer einzelnen, leistungsfähigen Lokomotion-Policy von der Simulation auf reale Hardware legen, untersuchen Margolis und Agrawal die Frage, ob erlernte Policies nicht nur auf einen Aufgabenbereich anwendbar sind, sondern auch flexibel an unterschiedliche und zuvor unbekannte Umgebungen angepasst werden kann.
 
-\subsection{Dynamische und vielseitige Fortbewegungsfähigkeiten für quadrupede Lokomotion}
+\subsection{Dynamische und vielseitige Fortbewegungsfähigkeiten für Lokomotion}
 
 \subsubsection{End-to-End Ansatz für die Fortbewegungsfähigkeit}
 In \cite{margolis2022walk} zeigen Margolis und Agrawal, dass eine verbesserte Generalisierung von gelernten Policies möglich und damit die Effektivität in bislang unbekannten Umgebungen erhöht werden kann. Das von den Autoren als Multiplicity of Behavior bezeichnete Konzept beschreibt eine Policy, welche Trainingsaufgaben auf unterschiedliche Weise lösen kann. Dies ist durch ein Training in einer vereinfachten Umgebung möglich, welche auf unbekannte, dynamische Umgebungen übertragbar ist, um ein Neutraining für spezifische Probleme zu vermeiden.
@@ -48,6 +48,16 @@ Zusätzlich kommt die Landungsschwierigkeit hinzu, da eine Landung den Aufprall 
 
 Neben den Schwierigkeiten, die mit der Aufgabe einhergehen, hat der Roboter inhärente Steuerungsbeschränkungen. Die Optimierung des Absprungs muss unter anderem die dynamische Beschränkung der Gelenkposition, Gelenkgeschwindigkeits- und Drehmomentsgrenzen berücksichtigen, die Empfindlichkeit der Trajektorienplanung gegenüber Fehlern und die beschränkte Echtzeitberechnung, die bei einer hohen Frequenz kontinuierlich durchgeführt werden muss und umfangreiches Wissen über das System und dessen Parameter erfordert \cite{bussola2025guidedreinforcementlearningomnidirectional}.
 
-Ähnlich wie von Recht \cite{recht2018tourreinforcementlearningview} festgestellt, weisen Bussola et al. darauf hin, dass reine End-to-End Deep Reinforcement Learning Ansätze zwar eine mögliche Alternative darstellen, allerdings hohe Varianz aufweisen, welches die Sicherheit negativ beeinträchtigt.
+Ähnlich wie von Recht \cite{recht2018tourreinforcementlearningview} und Henderson et al. \cite{henderson2019deepreinforcementlearningmatters} festgestellt, weisen Bussola et al. darauf hin, dass reine End-to-End Deep Reinforcement Learning Ansätze zwar eine mögliche Alternative darstellen, allerdings hohe Varianz aufweisen, welches die Sicherheit negativ beeinträchtigt.\newline
+Um dieses Problem zu umgehen, stellen Bussola et al. den sog. Guided, also geführten, Reinforcement Learning Ansatz vor. Dabei wird die gesamte Sprungaktion, also von Stillstand bis Landung, als einen einzigen Aktionsschritt geplant. Die Sprungtrajektorie wird dabei mithilfe von Bézier-Kurven und einem Uniformly Accelerated Rectilinear Motion (UARM) Modell parametrisiert. \newline
+Bézier-Kurven beschreiben den Verlauf der Trajektorie über eine kleine Anzahl an Kontrollpunkten, wohingegen das UARM-Modell eine vereinfachte physikalische Beschreibung der Schwerpunktbewegung während des Sprungs beschreibt.
 
-Die Untersuchungen zu den verschiedenen Ansätzen der Navigation in schwierigem Gelände ermöglicht daher die Untersuchung von Navigationsansätzen mithilfe von Deep Reinforcement Learning. 
+Diese Parametrisierung wird mithilfe von PPO durchgeführt, und versucht dabei, Parameter zu optimieren, welche den Werten aus der optimalen Steuerung ähneln \cite{bussola2025guidedreinforcementlearningomnidirectional}. % PPO wird im Grundlagenteil erklärt
+Die Belohnungsfunktion im Training stellt dabei sicher, dass die Policy die physikalischen und Aktuatorengrenzen während des Absprungs respektiert.
+
+Im Gegensatz zu reinen End-to-End Ansätzen ist die Ausführung der Bewegung vom Lernprozess entkoppelt. Die optimierten Trajektorienparameter werden hierbei an einen klassischen Low-Level-Regler übergeben, der die Bewegung stabil und mit Rücksicht auf die Systemdynamik ausführt.
+
+\section{Navigation mithilfe von Deep Reinforcement Learning}
+Während die bisher betrachteten vorgestellten Arbeiten den Schwerpunkt auf die Ausführung und Parametrisierung legen, ist in vielen Anwendungsszenarien nicht nur die Art der Bewegung entscheidend, sondern auch die Wahl geeigneter Bewegungsentscheidungen unter Berücksichtigung von Hindernissen, Zielvorgaben und Umgebungsinformationen. Diese Aufgabenstellung wird in der Robotik unter dem Begriff Navigation zusammengefasst.
+
+
