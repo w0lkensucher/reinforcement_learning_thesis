@@ -61,7 +61,7 @@ class Go2BaseEnv:
     def _setup_scene(self, show_viewer):
         # create scene
         self.scene = gs.Scene(
-            sim_options=gs.options.SimOptions(dt=self.dt, substeps=2),
+            sim_options=gs.options.SimOptions(dt=self.dt, substeps=4),  # Increased substeps for better collision
             viewer_options=gs.options.ViewerOptions(
                 max_FPS=int(0.5 / self.dt),
                 camera_pos=(2.0, 0.0, 2.5),
@@ -77,9 +77,9 @@ class Go2BaseEnv:
                 constraint_solver=gs.constraint_solver.Newton,
                 enable_collision=True,
                 enable_joint_limit=True,
-                # for this locomotion policy there are usually no more than 30 collision pairs
-                # set a low value can save memory
-                max_collision_pairs=30,
+                # Set with some headroom above Genesis's calculated maximum
+                max_collision_pairs=500,
+                enable_self_collision=False,  # Disable robot self-collision to focus on external collisions
             ),
             show_viewer=show_viewer
         )
@@ -168,8 +168,11 @@ class Go2BaseEnv:
 
     def _check_termination(self):
         self.reset_buf = self.episode_length_buf > self.max_episode_length
-        self.reset_buf |= torch.abs(self.base_radians[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"]
-        self.reset_buf |= torch.abs(self.base_radians[:, 0]) > self.env_cfg["termination_if_roll_greater_than"]
+        # Convert degree thresholds to radians for comparison
+        pitch_thresh_rad = self.env_cfg["termination_if_pitch_greater_than"] * 3.14159 / 180.0
+        roll_thresh_rad = self.env_cfg["termination_if_roll_greater_than"] * 3.14159 / 180.0
+        self.reset_buf |= torch.abs(self.base_radians[:, 1]) > pitch_thresh_rad
+        self.reset_buf |= torch.abs(self.base_radians[:, 0]) > roll_thresh_rad
 
         time_out_idx = (self.episode_length_buf > self.max_episode_length).nonzero(as_tuple=False).reshape((-1,))
         self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=gs.device, dtype=gs.tc_float)

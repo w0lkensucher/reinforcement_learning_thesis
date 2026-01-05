@@ -44,9 +44,9 @@ def main():
     # evaluation petting options
     parser.add_argument("--manual_petting", action='store_true',
                         help="Manually trigger petting every N steps")
-    parser.add_argument("--petting_interval", type=int, default=200,
+    parser.add_argument("--petting_interval", type=int, default=500,
                         help="Steps between manual petting events")
-    parser.add_argument("--petting_duration", type=int, default=100,
+    parser.add_argument("--petting_duration", type=int, default=50,
                         help="Duration of manual petting events in steps")
     parser.add_argument("--petting_frequency", type=float, default= 0.01, # 0.01 = 1% chance per step
                         help="Probability of petting event per step (if not manual)")
@@ -79,6 +79,7 @@ def main():
     # Override petting settings for evaluation
     if args.manual_petting:
         env_cfg["petting_probability"] = 0.0  # Disable automatic petting
+        env_cfg["manual_petting"] = True
         if not args.silent:
             print(f"🖐️ Manual petting mode: every {args.petting_interval} steps for {args.petting_duration} steps")
     else:
