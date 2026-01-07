@@ -79,7 +79,6 @@ class Go2BaseEnv:
                 enable_joint_limit=True,
                 # Set with some headroom above Genesis's calculated maximum
                 max_collision_pairs=500,
-                enable_self_collision=False,  # Disable robot self-collision to focus on external collisions
             ),
             show_viewer=show_viewer
         )
@@ -171,6 +170,7 @@ class Go2BaseEnv:
         # Convert degree thresholds to radians for comparison
         pitch_thresh_rad = self.env_cfg["termination_if_pitch_greater_than"] * 3.14159 / 180.0
         roll_thresh_rad = self.env_cfg["termination_if_roll_greater_than"] * 3.14159 / 180.0
+        
         self.reset_buf |= torch.abs(self.base_radians[:, 1]) > pitch_thresh_rad
         self.reset_buf |= torch.abs(self.base_radians[:, 0]) > roll_thresh_rad
 
@@ -240,6 +240,18 @@ class Go2BaseEnv:
         return torch.square(self.base_lin_vel[:, 2])
     
 
+    def _reward_tracking_lin_vel(self):
+        # Tracking of linear velocity commands (xy axes)
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return torch.exp(-lin_vel_error / self.reward_cfg["tracking_sigma"])
+
+
+    def _reward_tracking_ang_vel(self):
+        # Tracking of angular velocity commands (yaw)
+        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        return torch.exp(-ang_vel_error / self.reward_cfg["tracking_sigma"])
+    
+    
     # Smoothness Rewards
     def _reward_action_rate(self):
         """Penalize rapid action changes - shared for smooth movement"""

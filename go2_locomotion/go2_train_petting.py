@@ -58,7 +58,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
             "activation": "elu",
             "actor_hidden_dims": [256, 128, 64],  # Smaller network for petting
             "critic_hidden_dims": [256, 128, 64],
-            "init_noise_std": 0.8,
+            "init_noise_std": 0.3,
             "class_name": "ActorCritic",
         },
         "runner": {
@@ -116,7 +116,7 @@ def get_petting_cfgs():
         'gentle_vel_threshold': 0.1,
         'manual_petting': False,
 
-        'petting_probability': 0.1,  # 10% chance to start petting each step
+        'petting_probability': 0,  # 1% chance to start petting each step
         'petting_duration': 100,  # Duration of petting force application (2s at 50Hz)
 
         # camera visualization
@@ -134,26 +134,29 @@ def get_petting_cfgs():
     }
     
     reward_cfg = {
-        "base_height_target": 0.37,  # Slightly lower for petting
+        "tracking_sigma": 0.25,
+        "base_height_target": 0.35,  # Slightly lower for petting
         "reward_scales": {
             # Petting-focused rewards
-            "petting_response": 15.0,        # High reward for gestures
-            "petting_stability": 2.0,       # Stability during gestures
-            "flexible_height": 2.0,         # Allow height variation
+            "petting_response": 0,        # High reward for gestures
+            "petting_stability": 0,       # Stability during gestures
+            "flexible_height": -1.5,         # Allow height variation
+            "upright": 0.5,        # Reward for minimal rotation
             
             # Very reduced base rewards
-            "lin_vel_z": 0.3,              # Allow some jumping for gestures
-            "action_rate": 0.01,            # Allow expressive movements
-            "similar_to_default": 0.01,    # Allow gesture poses
-            "no_fall": 0,                 # Moderate penalty for falling
+            "tracking_lin_vel": 1.0,
+            "tracking_ang_vel": 0.1,
+            "lin_vel_z": 0,             # Penalize vertical movement
+            "action_rate": -0.3,           # Penalize rapid changes
+            "similar_to_default": -0.5,    # Allow gesture poses
         },
     }
     
     command_cfg = {
         "num_commands": 3,
-        "lin_vel_x_range": [-0.3, 0.5],  # Slower, gentle movement
-        "lin_vel_y_range": [-0.2, 0.2],  # Minimal lateral
-        "ang_vel_range": [-0.3, 0.3],    # Gentle turning
+        "lin_vel_x_range": [-0.02, 0.02],  # Slower, gentle movement
+        "lin_vel_y_range": [-0.02, 0.02],  # Minimal lateral
+        "ang_vel_range": [-0.02, 0.02],    # Gentle turning
     }
     
     return env_cfg, obs_cfg, reward_cfg, command_cfg

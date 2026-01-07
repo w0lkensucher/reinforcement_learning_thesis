@@ -27,6 +27,9 @@ class Go2PettingEnv(Go2BaseEnv):
 
             self.manual_petting_active = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
             self.manual_petting_timer = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
+            
+            # Debug counter
+            self.global_step = 0
 
             self._setup_scene(show_viewer)
             self._setup_robot()
@@ -164,7 +167,6 @@ class Go2PettingEnv(Go2BaseEnv):
             
             # Position-based detection criteria
             in_contact = hand_head_distance < 0.08
-            no_cooldown = self.gesture_cooldown[debug_env] == 0
             height_ok = self.base_pos[debug_env, 2] > 0.20
             roll = self.base_radians[debug_env, 0].item() * 180 / 3.14159
             pitch = self.base_radians[debug_env, 1].item() * 180 / 3.14159
@@ -179,7 +181,7 @@ class Go2PettingEnv(Go2BaseEnv):
                   f"Height={self.base_pos[debug_env, 2].item():.2f}m (ok={height_ok}), "
                   f"Roll={roll:.1f}° Pitch={pitch:.1f}° (upright={upright}), "
                   f"Timer={self.petting_force_timer[debug_env].item()}, Cooldown={self.gesture_cooldown[debug_env].item()}, "
-                  f"DETECTED={in_contact & no_cooldown & height_ok & upright & self.is_being_petted[debug_env]}")
+                  f"DETECTED={in_contact & height_ok & upright & self.is_being_petted[debug_env]}")
         
         # Since collision forces aren't working, use POSITION-BASED detection
         # Get hand positions for all environments
@@ -237,48 +239,43 @@ class Go2PettingEnv(Go2BaseEnv):
         
 
     def _get_petting_gesture_actions(self):
-        """Generate friendly petting response gesture (tail wag + head movement)"""
-        gesture_actions = torch.zeros_like(self.actions)
+        """Generate friendly petting response gesture - SMALL ADDITIVE adjustments to learned actions"""
+        # Start with learned actions (will be blended in step() function)
+        gesture_adjustments = torch.zeros_like(self.actions)
         
         # Create gentle wave pattern
         wave_phase = (self.gesture_timer.float() / 20.0) % (2 * torch.pi)
-        wave_amplitude = 0.3
+        wave_amplitude = 0.15  # Reduced from 0.3 - much gentler
         
-        # Gentle "happy" front leg movement (like excited stepping)
-        gesture_actions[:, 3] = wave_amplitude * 0.5 * torch.sin(wave_phase)           # FL_hip
-        gesture_actions[:, 4] = 0.8 + wave_amplitude * 0.3 * torch.sin(wave_phase)    # FL_thigh
-        gesture_actions[:, 5] = -1.5 + wave_amplitude * 0.3 * torch.cos(wave_phase)   # FL_calf
+        # Very subtle "happy" movement - just small additive wiggles
+        # These are ADDED to learned actions, not replacements
+        gesture_adjustments[:, 3] = wave_amplitude * 0.3 * torch.sin(wave_phase)       # FL_hip
+        gesture_adjustments[:, 4] = wave_amplitude * 0.2 * torch.sin(wave_phase)       # FL_thigh
+        gesture_adjustments[:, 5] = wave_amplitude * 0.2 * torch.cos(wave_phase)       # FL_calf
         
-        gesture_actions[:, 0] = wave_amplitude * 0.5 * torch.sin(wave_phase + 1.57)   # FR_hip
-        gesture_actions[:, 1] = 0.8 + wave_amplitude * 0.3 * torch.sin(wave_phase + 1.57)  # FR_thigh
-        gesture_actions[:, 2] = -1.5 + wave_amplitude * 0.3 * torch.cos(wave_phase + 1.57) # FR_calf
+        gesture_adjustments[:, 0] = wave_amplitude * 0.3 * torch.sin(wave_phase + 1.57)   # FR_hip
+        gesture_adjustments[:, 1] = wave_amplitude * 0.2 * torch.sin(wave_phase + 1.57)   # FR_thigh
+        gesture_adjustments[:, 2] = wave_amplitude * 0.2 * torch.cos(wave_phase + 1.57)   # FR_calf
         
-        # "Tail wagging" with rear legs (gentle side-to-side)
-        tail_wag = wave_amplitude * 0.4 * torch.sin(wave_phase * 2)  # Faster tail movement
-        gesture_actions[:, 6] = tail_wag    # RL_hip
-        gesture_actions[:, 7] = 1.0         # RL_thigh (stable)
-        gesture_actions[:, 8] = -1.5        # RL_calf (stable)
-        
-        gesture_actions[:, 9] = -tail_wag   # RR_hip (opposite direction)
-        gesture_actions[:, 10] = 1.0        # RR_thigh (stable)
-        gesture_actions[:, 11] = -1.5       # RR_calf (stable)
+        # Very subtle "tail wagging" with rear hips only
+        tail_wag = wave_amplitude * 0.3 * torch.sin(wave_phase * 2)
+        gesture_adjustments[:, 6] = tail_wag     # RL_hip
+        gesture_adjustments[:, 9] = -tail_wag    # RR_hip (opposite)
+        # Rear legs thigh/calf: no adjustment, let learned actions handle stability
 
-        # Transition back to default pose in the last N steps of the gesture
-        transition_steps = 20  # Number of steps for smooth return
+        # Fade out gesture in the last N steps for smooth return to normal
+        transition_steps = 50  # Longer fade out
         ending = (self.gesture_timer > 0) & (self.gesture_timer <= transition_steps)
-        blend_factor = (self.gesture_timer.float() / transition_steps).clamp(0, 1).unsqueeze(1)  # Shape: [num_envs, 1]
-
-        # Default pose (from self.default_dof_pos)
-        default_pose = self.default_dof_pos.unsqueeze(0).expand_as(gesture_actions)
-
-        # Blend gesture_actions towards default pose for ending gestures
-        gesture_actions = torch.where(
+        fade_factor = (self.gesture_timer.float() / transition_steps).clamp(0, 1).unsqueeze(1)
+        
+        # Scale down adjustments during fadeout
+        gesture_adjustments = torch.where(
             ending.unsqueeze(1),
-            gesture_actions * blend_factor + default_pose * (1 - blend_factor),
-            gesture_actions
+            gesture_adjustments * fade_factor,
+            gesture_adjustments
         )
 
-        return gesture_actions
+        return gesture_adjustments
 
 
     def _move_hand_to_position(self, env_id, target_pos, zero_velocity=True):
@@ -309,9 +306,10 @@ class Go2PettingEnv(Go2BaseEnv):
             return
         
         # Random chance of starting new petting interaction
+        # Note: Don't check gesture_cooldown here - petting should be able to start anytime
+        # The cooldown only prevents triggering NEW gestures, not petting itself
         start_petting = (torch.rand(self.num_envs, device=self.device) < self.petting_probability) & \
-                       (self.petting_force_timer == 0) & \
-                       (self.gesture_cooldown == 0)
+                       (self.petting_force_timer == 0)
         
         # Update petting timers
         self.petting_force_timer = torch.where(
@@ -414,34 +412,33 @@ class Go2PettingEnv(Go2BaseEnv):
         base_height = self.base_pos[:, 2]
         
         # Different target heights for different behaviors
-        if (self.gesture_timer > 0).any():
+        if (self.gesture_timer > 0).any() or self.head_touched.any():
             # During gestures, allow more height variation
             tolerance = 0.4
-            target_height = 0.35  # Slightly lower for better petting access
-        elif self.head_touched.any():
-            # When being petted, allow sitting/lying
-            tolerance = 0.6
-            target_height = 0.25  # Allow lower postures
+            target_height = self.reward_cfg.get("base_height_target", 0.35)  # Slightly lower for better petting access
+        # elif self.head_touched.any():
+        #     # When being petted, allow sitting/lying
+        #     tolerance = 0.6
+        #     target_height = 0.25  # Allow lower postures
         else:
             # Normal standing posture
             tolerance = 0.1
             target_height = 0.42
         
         height_error = torch.abs(base_height - target_height)
-        return -torch.square(torch.clamp(height_error - tolerance, min=0.0))
+        return torch.exp(-10 * torch.clamp(height_error - tolerance, min=0.0))
     
     
-    def _reward_no_fall(self):
-        # Negative reward if roll or pitch exceeds threshold
+    def _reward_upright(self):
+        # Exponential reward for being upright (low roll and pitch)
         roll = torch.abs(self.base_radians[:, 0])
         pitch = torch.abs(self.base_radians[:, 1])
-        roll_thresh = self.env_cfg.get("termination_if_roll_greater_than", 45)
-        pitch_thresh = self.env_cfg.get("termination_if_pitch_greater_than", 45)
-        fallen = (roll > roll_thresh) | (pitch > pitch_thresh)
-        return torch.where(fallen, torch.full_like(roll, -2.0), torch.zeros_like(roll))
+        return torch.exp(-5 * (roll + pitch))
 
     def step(self, actions):
         """Petting-specific step logic"""
+        self.global_step += 1
+        
         if self.manual_petting_active.any():
             # Apply manual petting (for testing/debugging)
             self._apply_manual_petting()
@@ -452,12 +449,12 @@ class Go2PettingEnv(Go2BaseEnv):
             # Check for head petting
             self._check_head_petting()
         
-        # Override actions if gesture is active
+        # Add gesture adjustments to learned actions (not replace!)
         active_gesture = self.gesture_timer > 0
         if active_gesture.any():
-            gesture_actions = self._get_petting_gesture_actions()
-            # Apply gesture only to environments where timer is active
-            actions = torch.where(active_gesture.unsqueeze(1), gesture_actions, actions)
+            gesture_adjustments = self._get_petting_gesture_actions()
+            # ADD small adjustments to learned actions for gesture environments
+            actions = actions + torch.where(active_gesture.unsqueeze(1), gesture_adjustments, torch.zeros_like(gesture_adjustments))
         
         # Update timers
         self.gesture_timer = torch.clamp(self.gesture_timer - 1, 0, self.gesture_duration)
