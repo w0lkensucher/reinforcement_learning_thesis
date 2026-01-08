@@ -57,7 +57,7 @@ Die Belohnungsfunktion im Training stellt dabei sicher, dass die Policy die phys
 
 Im Gegensatz zu reinen End-to-End Ansätzen ist die Ausführung der Bewegung vom Lernprozess entkoppelt. Die optimierten Trajektorienparameter werden hierbei an einen klassischen Low-Level-Regler übergeben, der die Bewegung stabil und mit Rücksicht auf die Systemdynamik ausführt.
 
-\section{Navigation mithilfe von Deep Reinforcement Learning}
+\section{Navigation mithilfe von Deep Reinforcement Learning} % Arbeit von Hoeller, Zhuang einbauen evtl
 Während die bisher betrachteten vorgestellten Arbeiten den Schwerpunkt auf die Ausführung und Parametrisierung legen, ist in vielen Anwendungsszenarien nicht nur die Art der Bewegung entscheidend, sondern auch die Wahl geeigneter Bewegungsentscheidungen unter Berücksichtigung von Hindernissen, Zielvorgaben und Umgebungsinformationen. Diese Aufgabenstellung wird in der Robotik unter dem Begriff Navigation zusammengefasst.
 
 In ihrer Arbeit stellen Tang et al. fest, dass Deep Reinforcement Learning in Bereichen wie das autonome Fahren in Städten oder den Drohnenflug im Freien wenig Verbreitung gefunden haben, unter anderem aufgrund strenger Robustheitsanforderungen sowie fehlender Generalisierbarkeit und Erklärbarkeit \cite{tang2024deepreinforcementlearningrobotics}. Hinzu kommt, dass Navigation Planung mit langer Voraussicht erfordert und währenddessen komplexe Bewegungsdynamiken berücksichtigt werden müssen.
@@ -66,5 +66,5 @@ Zusätzlich dazu steht die Lokomotion vierbeiniger Roboter vor der Herausforderu
 
 Jin et al. selbst verfolgen einen End-to-End Ansatz, bei dem aus rohen, teilweise fehlerhaften Sensordaten direkt Navigationskommandos erzeugt werden \cite{jin2023resilientleggedlocalnavigation}. Die eigentliche Ausführung ist ein hierarchischer Ansatz, da eine vortrainierte Low-Level-Policy benutzt wird, um zu laufen, jedoch der Navigationsansatz End-to-End trainiert wird \cite{jin2023resilientleggedlocalnavigation}. End-to-End bezieht sich also auf die funktionale Ebene der Navigation, nicht auf die vollständige Kontrolle des Roboters.
 
-\section{Reward Shaping in Deep Reinforcement Learning}
+\section{Reward Shaping in Deep Reinforcement Learning} % Reward Hacking und Dense/Sparse Rewards
 

@@ -174,14 +174,14 @@ class Go2PettingEnv(Go2BaseEnv):
             pitch_thresh = self.env_cfg.get("termination_if_pitch_greater_than", 45)
             upright = (abs(roll) < roll_thresh) and (abs(pitch) < pitch_thresh)
             
-            print(f"[DEBUG] Env {debug_env}: "
-                  f"Dist={hand_head_distance:.3f}m (contact={in_contact}, thresh=0.08m), "
-                  f"Hand[{hand_pos[0].item():.2f}, {hand_pos[1].item():.2f}, {hand_pos[2].item():.2f}] "
-                  f"Head[{head_pos[0].item():.2f}, {head_pos[1].item():.2f}, {head_pos[2].item():.2f}], "
-                  f"Height={self.base_pos[debug_env, 2].item():.2f}m (ok={height_ok}), "
-                  f"Roll={roll:.1f}° Pitch={pitch:.1f}° (upright={upright}), "
-                  f"Timer={self.petting_force_timer[debug_env].item()}, Cooldown={self.gesture_cooldown[debug_env].item()}, "
-                  f"DETECTED={in_contact & height_ok & upright & self.is_being_petted[debug_env]}")
+            # print(f"[DEBUG] Env {debug_env}: "
+            #       f"Dist={hand_head_distance:.3f}m (contact={in_contact}, thresh=0.08m), "
+            #       f"Hand[{hand_pos[0].item():.2f}, {hand_pos[1].item():.2f}, {hand_pos[2].item():.2f}] "
+            #       f"Head[{head_pos[0].item():.2f}, {head_pos[1].item():.2f}, {head_pos[2].item():.2f}], "
+            #       f"Height={self.base_pos[debug_env, 2].item():.2f}m (ok={height_ok}), "
+            #       f"Roll={roll:.1f}° Pitch={pitch:.1f}° (upright={upright}), "
+            #       f"Timer={self.petting_force_timer[debug_env].item()}, Cooldown={self.gesture_cooldown[debug_env].item()}, "
+            #       f"DETECTED={in_contact & height_ok & upright & self.is_being_petted[debug_env]}")
         
         # Since collision forces aren't working, use POSITION-BASED detection
         # Get hand positions for all environments
@@ -238,6 +238,7 @@ class Go2PettingEnv(Go2BaseEnv):
                                         self.gesture_cooldown)
         
 
+    # Test limits of movement
     def _get_petting_gesture_actions(self):
         """Generate friendly petting response gesture - SMALL ADDITIVE adjustments to learned actions"""
         # Start with learned actions (will be blended in step() function)
@@ -434,6 +435,7 @@ class Go2PettingEnv(Go2BaseEnv):
         roll = torch.abs(self.base_radians[:, 0])
         pitch = torch.abs(self.base_radians[:, 1])
         return torch.exp(-5 * (roll + pitch))
+
 
     def step(self, actions):
         """Petting-specific step logic"""
