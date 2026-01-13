@@ -72,7 +72,7 @@ def main():
     
     # Disable training rewards for pure behavior evaluation
     reward_cfg["reward_scales"] = {}
-    env_cfg["episode_length_s"] = 30.0
+    env_cfg["episode_length_s"] = 60.0
 
     max_sim_step = int(env_cfg["episode_length_s"] * 30)
 

@@ -116,8 +116,8 @@ def get_petting_cfgs():
         'gentle_vel_threshold': 0.1,
         'manual_petting': False,
 
-        'petting_probability': 0.01,  # 1% chance to start petting each step
-        'petting_duration': 100,  # Duration of petting force application (2s at 50Hz)
+        'petting_probability': 0.1,  # 10% chance to start petting each step
+        'petting_duration': 150,  # Duration of petting force application (3s at 50Hz)
 
         # camera visualization
         "visualize_camera": True,

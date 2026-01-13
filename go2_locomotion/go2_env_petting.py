@@ -13,6 +13,10 @@ class Go2PettingEnv(Go2BaseEnv):
             self.gesture_duration = 350  # 7 seconds at 50Hz
             self.gesture_cooldown = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
             self.cooldown_duration = 100  # 2 seconds cooldown
+            
+            # Track when to resume normal behavior after petting/gesture
+            self.resume_normal_behavior = torch.ones(self.num_envs, device=self.device, dtype=torch.bool)
+            self.falling_edge = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
 
             # Detection parameters
             self.gentle_speed_threshold = env_cfg.get('gentle_speed_threshold', 0.3)  # Must be moving slowly
@@ -225,17 +229,28 @@ class Go2PettingEnv(Go2BaseEnv):
         # Skip petting detection if no hands exist (petting_probability=0)
         if not hasattr(self, 'petting_hand'):
             return
+        
+        # Track falling edge for resuming normal behavior
+        if not hasattr(self, '_prev_head_touched'):
+            self._prev_head_touched = torch.zeros_like(self.head_touched)
             
         self.head_touched = self._detect_head_pressure()
 
-        # Start gesture timer and cooldown for touched environments
+        self.falling_edge = (~self.head_touched) & self._prev_head_touched
+
+        # Only trigger gesture on rising edge (when petting starts this step)
         touched_envs = self.head_touched
-        self.gesture_timer = torch.where(touched_envs, 
-                                    torch.full_like(self.gesture_timer, self.gesture_duration),
-                                    self.gesture_timer)
-        self.gesture_cooldown = torch.where(touched_envs,
-                                        torch.full_like(self.gesture_cooldown, self.cooldown_duration),
-                                        self.gesture_cooldown)
+        # Rising edge: was not touched last step, now touched
+        if not hasattr(self, '_prev_head_touched'):
+            self._prev_head_touched = torch.zeros_like(touched_envs)
+        rising_edge = touched_envs & (~self._prev_head_touched)
+        self.gesture_timer = torch.where(rising_edge,
+                                         torch.full_like(self.gesture_timer, self.gesture_duration),
+                                         self.gesture_timer)
+        self.gesture_cooldown = torch.where(rising_edge,
+                                            torch.full_like(self.gesture_cooldown, self.cooldown_duration),
+                                            self.gesture_cooldown)
+        self._prev_head_touched = touched_envs.clone()
         
 
     # Test limits of movement
@@ -246,7 +261,7 @@ class Go2PettingEnv(Go2BaseEnv):
         
         # Create gentle wave pattern
         wave_phase = (self.gesture_timer.float() / 20.0) % (2 * torch.pi)
-        wave_amplitude = 0.15  # Reduced from 0.3 - much gentler
+        wave_amplitude = 0.3 
         
         # Very subtle "happy" movement - just small additive wiggles
         # These are ADDED to learned actions, not replacements
@@ -264,18 +279,28 @@ class Go2PettingEnv(Go2BaseEnv):
         gesture_adjustments[:, 9] = -tail_wag    # RR_hip (opposite)
         # Rear legs thigh/calf: no adjustment, let learned actions handle stability
 
-        # Fade out gesture in the last N steps for smooth return to normal
-        transition_steps = 50  # Longer fade out
-        ending = (self.gesture_timer > 0) & (self.gesture_timer <= transition_steps)
-        fade_factor = (self.gesture_timer.float() / transition_steps).clamp(0, 1).unsqueeze(1)
-        
-        # Scale down adjustments during fadeout
-        gesture_adjustments = torch.where(
-            ending.unsqueeze(1),
-            gesture_adjustments * fade_factor,
-            gesture_adjustments
-        )
-
+        # After gesture ends, bias actions toward default joint angles
+        if hasattr(self, "env_cfg") and "default_joint_angles" in self.env_cfg and "joint_names" in self.env_cfg:
+            # Build tensor of default joint angles in correct order
+            joint_names = self.env_cfg["joint_names"]
+            default_angles = self.env_cfg["default_joint_angles"]
+            default_angles_tensor = torch.tensor(
+                [default_angles[name] for name in joint_names],
+                device=self.device
+            ).unsqueeze(0).expand(self.num_envs, -1)
+            # If gesture_timer is zero, encourage return to default
+            post_gesture = (self.gesture_timer == 0).unsqueeze(1)
+            # Blend: if gesture_timer==0, set adjustment to move toward default
+            # (Assume self.dof_pos is [num_envs, num_joints])
+            if hasattr(self, "dof_pos"):
+                to_default = default_angles_tensor - self.dof_pos
+                # Use a moderate gain to avoid abrupt jumps
+                gain = 0.5
+                gesture_adjustments = torch.where(
+                    post_gesture,
+                    gain * to_default,
+                    gesture_adjustments
+                )
         return gesture_adjustments
 
 
@@ -427,8 +452,12 @@ class Go2PettingEnv(Go2BaseEnv):
 
 
     def step(self, actions):
+
         """Petting-specific step logic"""
         self.global_step += 1
+        
+        # By default, allow normal behavior
+        self.resume_normal_behavior[:] = False
         
         if self.manual_petting_active.any():
             # Apply manual petting (for testing/debugging)
@@ -442,6 +471,8 @@ class Go2PettingEnv(Go2BaseEnv):
         
         # Add gesture adjustments to learned actions (not replace!)
         active_gesture = self.gesture_timer > 0
+        # Resume normal behavior if hand was removed (falling edge) and gesture finished
+        self.resume_normal_behavior = self.falling_edge & (self.gesture_timer == 0)
         if active_gesture.any():
             gesture_adjustments = self._get_petting_gesture_actions()
             # ADD small adjustments to learned actions for gesture environments
