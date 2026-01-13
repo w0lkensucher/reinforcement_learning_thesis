@@ -263,6 +263,13 @@ class Go2BaseEnv:
         """Stay close to default pose - shared for natural posture"""
         return torch.sum(torch.abs(self.dof_pos - self.default_dof_pos), dim=1)
     
+    
+    def _reward_upright(self):
+        # Exponential reward for being upright (low roll and pitch)
+        roll = torch.abs(self.base_radians[:, 0])
+        pitch = torch.abs(self.base_radians[:, 1])
+        return torch.exp(-5 * (roll + pitch))
+
 
     # abstract methods
     def step(self, actions):

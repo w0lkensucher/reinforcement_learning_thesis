@@ -20,6 +20,7 @@ import numpy as np
 import re
 from importlib import metadata
 from datetime import datetime
+from tqdm import tqdm
 
 try:
     try:
@@ -139,12 +140,9 @@ def get_navigation_cfgs(curriculum_stage=1):
             "forward_movement",
             "straight_walk_when_clear",
             "obstacle_avoidance",
-            "adaptive_base_height",
-            "orientation_stability",
-            "angular_velocity_stability",
-            "upright_posture",
+            "height",
+            "upright",
             "landing_stability",
-            "ground_clearance",
             "lin_vel_z",
             "action_rate",
             "similar_to_default",
@@ -162,17 +160,18 @@ def get_navigation_cfgs(curriculum_stage=1):
 
     if curriculum_stage == 1:
         # Stage 1: Standing safely
-        command_cfg["lin_vel_x_range"] = [0.0, 0.0]
-        command_cfg["lin_vel_y_range"] = [0.0, 0.0]
-        command_cfg["ang_vel_range"] = [0.0, 0.0]
+        command_cfg["lin_vel_x_range"] = [-0.1, 0.1]
+        command_cfg["lin_vel_y_range"] = [-0.1, 0.1]
+        command_cfg["ang_vel_range"] = [-0.1, 0.1]
 
-        reward_cfg["reward_scales"]["upright_posture"] = 2.0
-        # reward_cfg["reward_scales"]["orientation_stability"] = -0.5
-        reward_cfg["reward_scales"]["similar_to_default"] = -0.1
-        reward_cfg["reward_scales"]["adaptive_base_height"] = -50
+        reward_cfg["reward_scales"]["upright"] = 1.0
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.5
+        reward_cfg["reward_scales"]["height"] = -3.0
 
-        reward_cfg["reward_scales"]["action_rate"] = -0.005
-        reward_cfg["reward_scales"]["lin_vel_z"] = -1.0
+        reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.5
+        reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.2
+        reward_cfg["reward_scales"]["action_rate"] = -0.5
+        reward_cfg["reward_scales"]["lin_vel_z"] = 0
         env_cfg["episode_length_s"] = 15.0
         env_cfg["use_obstacles"] = False
 
@@ -356,7 +355,10 @@ def main():
             print(f"🔄 Resuming from latest checkpoint: {resume_path}")
             runner.load(resume_path)
 
-    runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
+    with tqdm(total=args.max_iterations, desc="Training Progress") as pbar:
+        # for iteration in range(args.max_iterations):
+        runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True, pbar=pbar)
+    # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
 
 if __name__ == "__main__":

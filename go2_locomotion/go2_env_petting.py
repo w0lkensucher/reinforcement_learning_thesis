@@ -408,7 +408,7 @@ class Go2PettingEnv(Go2BaseEnv):
         return stability_reward
 
 
-    def _reward_flexible_height(self): # TODO gradient check
+    def _reward_flexible_height(self):
         """Petting-specific height control - allow sitting, lying"""
         base_height = self.base_pos[:, 2]
         
@@ -417,10 +417,6 @@ class Go2PettingEnv(Go2BaseEnv):
             # During gestures, allow more height variation
             tolerance = 0.4
             target_height = self.reward_cfg.get("base_height_target", 0.35)  # Slightly lower for better petting access
-        # elif self.head_touched.any():
-        #     # When being petted, allow sitting/lying
-        #     tolerance = 0.6
-        #     target_height = 0.25  # Allow lower postures
         else:
             # Normal standing posture
             tolerance = 0.1
@@ -428,13 +424,6 @@ class Go2PettingEnv(Go2BaseEnv):
         
         height_error = torch.abs(base_height - target_height)
         return torch.exp(-10 * torch.clamp(height_error - tolerance, min=0.0))
-    
-    
-    def _reward_upright(self):
-        # Exponential reward for being upright (low roll and pitch)
-        roll = torch.abs(self.base_radians[:, 0])
-        pitch = torch.abs(self.base_radians[:, 1])
-        return torch.exp(-5 * (roll + pitch))
 
 
     def step(self, actions):

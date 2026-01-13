@@ -501,36 +501,19 @@ class Go2NavigationEnv(Go2BaseEnv):
         return nearest_low_signal, nearest_high_signal, closest_low_distance, closest_high_distance
 
 
+    def _reward_height(self):
+        """Petting-specific height control - allow sitting, lying"""
+        base_height = self.base_pos[:, 2]
+
+        # Normal standing posture
+        tolerance = 0.1
+        target_height = self.reward_cfg.get('target_height', 0.42)
+        
+        height_error = torch.abs(base_height - target_height)
+        return torch.exp(-10 * torch.clamp(height_error - tolerance, min=0.0))
+
+
     # Locomotion Rewards
-    def _reward_tracking_lin_vel(self):
-        """Track commanded linear velocity with direct error penalty"""
-        # Calculate velocity error
-        vel_error = self.commands[:, :2] - self.base_lin_vel[:, :2]
-        error_magnitude = torch.norm(vel_error, dim=1)
-        
-        # Direct penalty
-        tolerance = 0.2  # 0.2 m/s tolerance
-        penalty = torch.where(error_magnitude > tolerance,
-                            -(error_magnitude - tolerance) * 3.0,  # Linear penalty beyond tolerance
-                            torch.zeros_like(error_magnitude))     # No penalty within tolerance
-        
-        return penalty
-
-
-    def _reward_tracking_ang_vel(self):
-        """Track commanded angular velocity with direct error penalty"""
-        # Calculate angular velocity error
-        ang_vel_error = torch.abs(self.commands[:, 2] - self.base_ang_vel[:, 2])
-        
-        # Direct penalty
-        tolerance = 0.3  # 0.3 rad/s tolerance
-        penalty = torch.where(ang_vel_error > tolerance,
-                            -(ang_vel_error - tolerance) * 2.0,    # Linear penalty beyond tolerance
-                            torch.zeros_like(ang_vel_error))      # No penalty within tolerance
-        
-        return penalty
-    
-
     def _reward_forward_movement(self):
         """Heavily reward forward movement, penalize standing still"""
         forward_vel = self.base_lin_vel[:, 0]
@@ -585,45 +568,6 @@ class Go2NavigationEnv(Go2BaseEnv):
         )
         
         return straight_reward
-
-    def _reward_adaptive_base_height(self):
-        """Maintain appropriate base height with terrain and obstacle awareness"""
-        base_height = self.base_pos[:, 2]
-        
-        # if self.uneven_terrain:
-        #     # Adaptive height based on local terrain
-        #     target_heights = []
-        #     for env_idx in range(self.num_envs):
-        #         robot_x = self.base_pos[env_idx, 0].item()
-        #         robot_y = self.base_pos[env_idx, 1].item()
-        #         terrain_height = self._get_terrain_height_at_position(robot_x, robot_y)
-        #         target_heights.append(terrain_height + 0.42)  # 42cm above terrain
-        #     target_height = torch.tensor(target_heights, device=self.device)
-        # else:
-            # Fixed height for flat terrain
-
-        target_height = self.reward_cfg["base_height_target"]
-        
-        # # Base height error
-        # height_error = torch.abs(base_height - target_height)
-        
-        # # Allow more height variation during jumping over low obstacles
-        # low_obs, _ = self._detect_nearby_obstacles()[:2]
-        
-        # # More lenient height control when jumping
-        # is_jumping = (self.base_lin_vel[:, 2] > 0.1) & (low_obs > 0.1)
-        # tolerance = torch.where(is_jumping, 0.3, 0.1)  # 30cm tolerance when jumping, 10cm normally
-        
-        # # Scaled penalty - less penalty within tolerance
-        # height_penalty = torch.where(height_error < tolerance, 
-        #                             height_error * 0.5,  # Gentle penalty within tolerance
-        #                             height_error * 2.0)  # Stronger penalty outside tolerance
-        
-        # bonus = (height_error < 0.02).float() * 0.1  # Small bonus for being very close to target height
-        
-        # return -height_penalty + bonus
-
-        return torch.square(base_height - target_height)
     
 
     def _reward_landing_stability(self):
@@ -655,101 +599,6 @@ class Go2NavigationEnv(Go2BaseEnv):
         
         return torch.where(is_landing, stability_reward * 0.3, torch.zeros_like(current_height))
 
-
-    def _reward_jumping_behavior(self):
-        """Reward for appropriate jumping over low obstacles"""
-        if len(self.obstacle_positions) == 0:
-            return torch.zeros(self.num_envs, device=self.device)
-        
-        robot_pos = self.base_pos
-        jumping_reward = torch.zeros(self.num_envs, device=self.device)
-        
-        # Check if robot is airborne (z-velocity > 0 and z-position > normal)
-        is_jumping = (self.base_lin_vel[:, 2] > 0.1) & (robot_pos[:, 2] > 0.5)
-        
-        if is_jumping.any():
-            # Check if there's a low obstacle nearby that justifies jumping
-            for obs_data in self.obstacle_positions:
-                if obs_data[3] == 'low':  # Only for low obstacles
-                    obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
-                    
-                    to_obstacle = obs_pos.unsqueeze(0) - robot_pos[:, :2]
-                    distance = torch.norm(to_obstacle, dim=1)
-                    
-                    # Reward jumping over low obstacles
-                    near_low_obstacle = distance < 1.0
-                    jumping_reward += torch.where(is_jumping & near_low_obstacle, 5.0, 0.0)
-        
-        return jumping_reward
-
-
-    def _reward_orientation_stability(self):
-        """Penalize excessive roll and pitch to prevent falling"""
-        # Use radians for calculation
-        roll = torch.abs(self.base_radians[:, 0])    # Roll angle
-        pitch = torch.abs(self.base_radians[:, 1])   # Pitch angle
-        
-        # Get termination thresholds (need to convert from degrees to radians)
-        max_roll = self.env_cfg["termination_if_roll_greater_than"] * torch.pi / 180.0
-        max_pitch = self.env_cfg["termination_if_pitch_greater_than"] * torch.pi / 180.0
-        
-        # Progressive penalty as robot approaches falling
-        roll_penalty = torch.where(roll > max_roll * 0.5,  # Start penalty at 50% of termination threshold
-                                -(roll / max_roll) * 1.5,  # Scale penalty by how close to falling
-                                torch.zeros_like(roll))
-        
-        pitch_penalty = torch.where(pitch > max_pitch * 0.5,
-                                -(pitch / max_pitch) * 1.5,
-                                torch.zeros_like(pitch))
-        
-        return roll_penalty + pitch_penalty
-
-
-    def _reward_angular_velocity_stability(self):
-        """Penalize excessive angular velocities that lead to falling"""
-        # Penalize high angular velocities in roll and pitch
-        roll_vel = torch.abs(self.base_ang_vel[:, 0])
-        pitch_vel = torch.abs(self.base_ang_vel[:, 1])
-        
-        # Moderate angular velocity is OK, but excessive is dangerous
-        max_safe_ang_vel = 2.0  # rad/s
-        
-        roll_vel_penalty = torch.where(roll_vel > max_safe_ang_vel,
-                                    torch.square(roll_vel - max_safe_ang_vel),
-                                    torch.zeros_like(roll_vel))
-        
-        pitch_vel_penalty = torch.where(pitch_vel > max_safe_ang_vel,
-                                    torch.square(pitch_vel - max_safe_ang_vel),
-                                    torch.zeros_like(pitch_vel))
-        
-        return roll_vel_penalty + pitch_vel_penalty
-
-
-    def _reward_upright_posture(self):
-        """Small reward for maintaining upright posture"""
-        # Small positive reward for maintaining good orientation
-        roll = torch.abs(self.base_radians[:, 0])
-        pitch = torch.abs(self.base_radians[:, 1])
-        
-        # Convert termination thresholds to radians
-        max_roll = self.env_cfg["termination_if_roll_greater_than"] * torch.pi / 180.0
-        max_pitch = self.env_cfg["termination_if_pitch_greater_than"] * torch.pi / 180.0
-        
-        # Exponential reward for staying upright
-        roll_reward = torch.exp(-roll * 3.0 / max_roll)
-        pitch_reward = torch.exp(-pitch * 3.0 / max_pitch)
-        
-        return (roll_reward + pitch_reward) * 0.1  # Small positive reward
-
-
-    # Navigation Rewards
-    def _reward_ground_clearance(self):
-        """Ensure minimum ground clearance for safe navigation"""
-        min_clearance = 0.25  # 25cm minimum
-        current_height = self.base_pos[:, 2]
-        clearance_violation = torch.clamp(min_clearance - current_height, min=0)
-        return -clearance_violation * 10.0  # Strong penalty for dragging
-    
 
     def _reward_obstacle_avoidance(self):
         """Reward for proper obstacle handling"""
