@@ -15,8 +15,13 @@ import argparse
 import pickle
 from importlib import metadata
 
+from tqdm import tqdm
+from  contextlib import redirect_stdout, redirect_stderr
+from io import StringIO
+
 import torch
 import numpy as np
+from datetime import datetime
 
 try:
     try:
@@ -37,10 +42,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="go2-navigation")
     parser.add_argument("--ckpt", type=int, default=100)
+    parser.add_argument("--record", action='store_true', default=False,
+                        help="Record evaluation video")
 
     parser.add_argument("--obstacles", type=str, choices=["none", "sparse", "slalom", "corridor"], 
                         default="none", help="Type of obstacles to add during evaluation")
-    
+    parser.add_argument("--silent", action='store_true', help="Suppress detailed output")
     args = parser.parse_args()
 
     gs.init()
@@ -48,6 +55,8 @@ def main():
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = pickle.load(open(f"logs/{args.exp_name}/cfgs.pkl", "rb"))
     reward_cfg["reward_scales"] = {}
+
+    max_sim_step = int(env_cfg["episode_length_s"] * 50) 
 
     if args.obstacles != "none":
         env_cfg["use_obstacles"] = True
@@ -84,14 +93,25 @@ def main():
     else:
         env_cfg["use_obstacles"] = False
 
-    env = Go2NavigationEnv(
-        num_envs=1,
-        env_cfg=env_cfg,
-        obs_cfg=obs_cfg,
-        reward_cfg=reward_cfg, 
-        command_cfg=command_cfg,
-        show_viewer=True,
-    )
+    if args.silent:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            env = Go2NavigationEnv(
+                num_envs=1,
+                env_cfg=env_cfg,
+                obs_cfg=obs_cfg,
+                reward_cfg=reward_cfg, 
+                command_cfg=command_cfg,
+                show_viewer=True,
+            )
+    else:
+        env = Go2NavigationEnv(
+            num_envs=1,
+            env_cfg=env_cfg,
+            obs_cfg=obs_cfg,
+            reward_cfg=reward_cfg, 
+            command_cfg=command_cfg,
+            show_viewer=True,
+        )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
     resume_path = os.path.join(log_dir, f"model_{args.ckpt}.pt")
@@ -102,10 +122,33 @@ def main():
     obs, _ = env.reset()
 
     with torch.no_grad():
-        while True:
-            actions = policy(obs)
-            obs, rews, dones, infos = env.step(actions)
+        if args.record:
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                env.cam.start_recording()
 
+            print("🎥 Recording video...")
+
+        with tqdm(total=max_sim_step, 
+                desc="🤖 Evaluating Navigation", 
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                file=sys.stdout,
+                dynamic_ncols=True) as pbar:
+            
+            for step in range(max_sim_step):
+                actions = policy(obs)
+                obs, rews, dones, infos = env.step(actions)
+                env.cam.render()
+                reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
+
+                if (len(reset_idx) > 0):
+                    env.reset_idx(reset_idx)
+                
+                pbar.update(1)
+
+        if args.record:
+            print("🎥 Stopping recording...")
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                env.cam.stop_recording(save_to_filename=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.exp_name}.mp4",fps=30)
 
 if __name__ == "__main__":
     main()

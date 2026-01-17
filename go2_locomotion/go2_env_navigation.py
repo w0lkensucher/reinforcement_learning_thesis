@@ -507,11 +507,30 @@ class Go2NavigationEnv(Go2BaseEnv):
 
         # Normal standing posture
         tolerance = 0.1
-        target_height = self.reward_cfg.get('target_height', 0.42)
+        target_height = self.reward_cfg.get('base_height_target', 0.42)
         
         height_error = torch.abs(base_height - target_height)
         return torch.exp(-10 * torch.clamp(height_error - tolerance, min=0.0))
-
+    
+    
+    def _reward_symmetry(self):
+        """Reward for left-right symmetry in leg movement (encourages coordinated gait)"""
+        # Actual joint order: [FR_hip, FR_thigh, FR_calf, FL_hip, FL_thigh, FL_calf, RR_hip, RR_thigh, RR_calf, RL_hip, RL_thigh, RL_calf]
+        # Indices for each joint type
+        FR = [0, 1, 2]
+        FL = [3, 4, 5]
+        RR = [6, 7, 8]
+        RL = [9, 10, 11]
+        dof_pos = self.dof_pos
+        # Hip symmetry (front and rear)
+        hip_sym = torch.abs(dof_pos[:, FL[0]] - dof_pos[:, FR[0]]) + torch.abs(dof_pos[:, RL[0]] - dof_pos[:, RR[0]])
+        # Thigh symmetry
+        thigh_sym = torch.abs(dof_pos[:, FL[1]] - dof_pos[:, FR[1]]) + torch.abs(dof_pos[:, RL[1]] - dof_pos[:, RR[1]])
+        # Calf symmetry
+        calf_sym = torch.abs(dof_pos[:, FL[2]] - dof_pos[:, FR[2]]) + torch.abs(dof_pos[:, RL[2]] - dof_pos[:, RR[2]])
+        # Combine and negate (lower difference = higher reward)
+        symmetry_penalty = hip_sym + thigh_sym + calf_sym
+        return symmetry_penalty
 
     # Locomotion Rewards
     def _reward_forward_movement(self):

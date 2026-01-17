@@ -173,6 +173,7 @@ class Go2BaseEnv:
         
         self.reset_buf |= torch.abs(self.base_radians[:, 1]) > pitch_thresh_rad
         self.reset_buf |= torch.abs(self.base_radians[:, 0]) > roll_thresh_rad
+        self.reset_buf |= self.base_pos[:, 2] < self.env_cfg.get("termination_if_base_height_lower_than", 0.30)
 
         time_out_idx = (self.episode_length_buf > self.max_episode_length).nonzero(as_tuple=False).reshape((-1,))
         self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=gs.device, dtype=gs.tc_float)
