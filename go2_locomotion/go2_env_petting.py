@@ -4,6 +4,27 @@ import numpy as np
 from go2_env_base import Go2BaseEnv
 
 class Go2PettingEnv(Go2BaseEnv):
+    """
+    Go2 Petting Environment - Trains robot to respond to physical petting interactions.
+    
+    TWO TRAINING MODES:
+    
+    1. STANDARD MODE (default, gesture_during_touch_mode=False):
+       - Hand touching robot head acts as a TRIGGER
+       - When hand is REMOVED (falling edge), robot performs a gesture response
+       - Gestures happen AFTER petting ends
+       - Rewards: petting_response, petting_stability, etc.
+       
+    2. GESTURE-DURING-TOUCH MODE (gesture_during_touch_mode=True):
+       - Robot performs gestures ONLY when hand is actively ON the robot
+       - Hand must remain in contact for gestures to continue
+       - When hand is removed, gestures stop
+       - Rewards: gesture_during_touch (requires both touch AND gesture active)
+       - Other rewards should be set to 0 to focus only on this behavior
+       
+    Configure via env_cfg['gesture_during_touch_mode'] = True/False
+    """
+    
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
             # Initialize base environment FIRST
             super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
@@ -13,6 +34,9 @@ class Go2PettingEnv(Go2BaseEnv):
             self.gesture_duration = 350  # 7 seconds at 50Hz
             self.gesture_cooldown = torch.zeros(self.num_envs, device=self.device, dtype=torch.int)
             self.cooldown_duration = 100  # 2 seconds cooldown
+            
+            # New mode: train gestures DURING active petting (not as response to hand removal)
+            self.gesture_during_touch_mode = env_cfg.get('gesture_during_touch_mode', False)
             
             # Track when to resume normal behavior after petting/gesture
             self.resume_normal_behavior = torch.ones(self.num_envs, device=self.device, dtype=torch.bool)
@@ -238,19 +262,14 @@ class Go2PettingEnv(Go2BaseEnv):
 
         self.falling_edge = (~self.head_touched) & self._prev_head_touched
 
-        # Only trigger gesture on rising edge (when petting starts this step)
-        touched_envs = self.head_touched
-        # Rising edge: was not touched last step, now touched
-        if not hasattr(self, '_prev_head_touched'):
-            self._prev_head_touched = torch.zeros_like(touched_envs)
-        rising_edge = touched_envs & (~self._prev_head_touched)
-        self.gesture_timer = torch.where(rising_edge,
+        # Trigger gesture on falling edge (when petting ends)
+        self.gesture_timer = torch.where(self.falling_edge,
                                          torch.full_like(self.gesture_timer, self.gesture_duration),
                                          self.gesture_timer)
-        self.gesture_cooldown = torch.where(rising_edge,
+        self.gesture_cooldown = torch.where(self.falling_edge,
                                             torch.full_like(self.gesture_cooldown, self.cooldown_duration),
                                             self.gesture_cooldown)
-        self._prev_head_touched = touched_envs.clone()
+        self._prev_head_touched = self.head_touched.clone()
         
 
     # Test limits of movement
@@ -260,21 +279,26 @@ class Go2PettingEnv(Go2BaseEnv):
         gesture_adjustments = torch.zeros_like(self.actions)
         
         # Create gentle wave pattern
-        wave_phase = (self.gesture_timer.float() / 20.0) % (2 * torch.pi)
-        wave_amplitude = 0.3 
+        divisor = self.env_cfg.get("gesture_wave_speed_divisor", 8.0)  # Controls speed of waving; put that in env settings
+
+        wave_phase = (self.gesture_timer.float() / divisor) % (2 * torch.pi)
+        wave_amplitude_hip = self.env_cfg.get("gesture_wave_amplitude_hip", 0.3)  # Radians 
+        wave_amplitude_thigh_calf = self.env_cfg.get("gesture_wave_amplitude_thigh_calf", 0.2)  # Radians 
+        PI_2 = 3.14159 / 2
+
         
         # Very subtle "happy" movement - just small additive wiggles
         # These are ADDED to learned actions, not replacements
-        gesture_adjustments[:, 3] = wave_amplitude * 0.3 * torch.sin(wave_phase)       # FL_hip
-        gesture_adjustments[:, 4] = wave_amplitude * 0.2 * torch.sin(wave_phase)       # FL_thigh
-        gesture_adjustments[:, 5] = wave_amplitude * 0.2 * torch.cos(wave_phase)       # FL_calf
+        gesture_adjustments[:, 3] = wave_amplitude_hip * torch.sin(wave_phase)       # FL_hip * 0.3 scaling
+        gesture_adjustments[:, 4] = wave_amplitude_thigh_calf * torch.sin(wave_phase)       # FL_thigh * 0.2 scaling
+        gesture_adjustments[:, 5] = wave_amplitude_thigh_calf * torch.cos(wave_phase)       # FL_calf * 0.2 scaling
         
-        gesture_adjustments[:, 0] = wave_amplitude * 0.3 * torch.sin(wave_phase + 1.57)   # FR_hip
-        gesture_adjustments[:, 1] = wave_amplitude * 0.2 * torch.sin(wave_phase + 1.57)   # FR_thigh
-        gesture_adjustments[:, 2] = wave_amplitude * 0.2 * torch.cos(wave_phase + 1.57)   # FR_calf
+        gesture_adjustments[:, 0] = wave_amplitude_hip * torch.sin(wave_phase + PI_2)   # FR_hip * 0.3 scaling
+        gesture_adjustments[:, 1] = wave_amplitude_thigh_calf * torch.sin(wave_phase + PI_2)   # FR_thigh * 0.2 scaling
+        gesture_adjustments[:, 2] = wave_amplitude_thigh_calf * torch.cos(wave_phase + PI_2)   # FR_calf  * 0.2 scaling
         
         # Very subtle "tail wagging" with rear hips only
-        tail_wag = wave_amplitude * 0.3 * torch.sin(wave_phase * 2)
+        tail_wag = wave_amplitude_hip * torch.sin(wave_phase * 2) # 0.3 scaling
         gesture_adjustments[:, 6] = tail_wag     # RL_hip
         gesture_adjustments[:, 9] = -tail_wag    # RR_hip (opposite)
         # Rear legs thigh/calf: no adjustment, let learned actions handle stability
@@ -417,6 +441,22 @@ class Go2PettingEnv(Go2BaseEnv):
         # Reward proportional to gesture progress
         progress = (self.gesture_duration - self.gesture_timer) / self.gesture_duration
         return torch.where(gesture_active, progress, torch.zeros_like(progress))
+    
+    
+    def _reward_gesture_during_touch(self):
+        """Reward for performing gestures ONLY when hand is actively touching the robot.
+        This encourages the robot to perform gestures while being petted, not after."""
+        # Only reward if hand is currently touching AND gestures are being performed
+        hand_on_robot = self.head_touched
+        performing_gesture = self.gesture_timer > 0
+        
+        # Reward is given when BOTH conditions are true
+        reward = hand_on_robot & performing_gesture
+        
+        # Scale reward by gesture progress for smooth learning
+        progress = (self.gesture_duration - self.gesture_timer).float() / self.gesture_duration
+        
+        return reward.float() * progress
 
 
     def _reward_petting_stability(self):
@@ -449,6 +489,13 @@ class Go2PettingEnv(Go2BaseEnv):
         
         height_error = torch.abs(base_height - target_height)
         return torch.exp(-10 * torch.clamp(height_error - tolerance, min=0.0))
+    
+    
+    def _reward_upright(self):
+        # Exponential reward for being upright (low roll and pitch)
+        roll = torch.abs(self.base_radians[:, 0])
+        pitch = torch.abs(self.base_radians[:, 1])
+        return torch.exp(-5 * (roll + pitch))
 
 
     def step(self, actions):
@@ -468,6 +515,17 @@ class Go2PettingEnv(Go2BaseEnv):
 
             # Check for head petting
             self._check_head_petting()
+        
+        # NEW MODE: Gesture during touch (hand triggers continuous gesture while touching)
+        if self.gesture_during_touch_mode:
+            # In this mode, gestures activate DURING touching, not after
+            # The gesture_timer activates when hand is ON the robot
+            touching_now = self.head_touched
+            self.gesture_timer = torch.where(
+                touching_now,
+                torch.full_like(self.gesture_timer, self.gesture_duration),  # Keep timer active
+                torch.clamp(self.gesture_timer - 1, 0, self.gesture_duration)  # Decay when not touching
+            )
         
         # Add gesture adjustments to learned actions (not replace!)
         active_gesture = self.gesture_timer > 0
@@ -545,6 +603,11 @@ class Go2PettingEnv(Go2BaseEnv):
             rew = reward_func() * self.reward_scales[name]
             self.rew_buf += rew
             self.episode_sums[name] += rew
+
+        # Continuous gesture reward: reward every step while gesture is active
+        gesture_reward_value = 1.0  # Set your desired reward value here
+        gesture_active = self.gesture_timer > 0
+        self.rew_buf += gesture_reward_value * gesture_active.float()
         self.episode_sums['reward'] += self.rew_buf
 
     def _resample_commands(self, envs_idx):

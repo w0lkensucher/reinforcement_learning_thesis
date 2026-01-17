@@ -20,6 +20,7 @@ from  contextlib import redirect_stdout, redirect_stderr
 from io import StringIO
 import torch
 import numpy as np
+from datetime import datetime
 
 try:
     try:
@@ -158,7 +159,7 @@ def main():
         if args.record:
             print("🎥 Stopping recording...")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-                env.cam.stop_recording(fps=30)
+                env.cam.stop_recording(save_to_filename=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.exp_name}.mp4",fps=30)
                     
     print(f"✅ Evaluation complete! Total petting events: {petting_events}")
 

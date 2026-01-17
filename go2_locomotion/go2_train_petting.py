@@ -115,10 +115,14 @@ def get_petting_cfgs():
         'gentle_press_range': [0.02, 0.08],
         'gentle_vel_threshold': 0.1,
         'manual_petting': False,
+        "gesture_during_touch_mode": False,  # KEY DIFFERENCE
 
         'petting_probability': 0.1,  # 10% chance to start petting each step
         'petting_duration': 150,  # Duration of petting force application (3s at 50Hz)
 
+        'gesture_wave_speed_divisor': 8.0,  # Controls speed of waving gesture
+        'gesture_wave_amplitude_hip': 0.1,    # Amplitude of waving gesture
+        'gesture_wave_amplitude_thigh_calf': 0.05,
         # camera visualization
         "visualize_camera": True,
     }
@@ -138,8 +142,9 @@ def get_petting_cfgs():
         "base_height_target": 0.42,  # Slightly lower for petting
         "reward_scales": {
             # Petting-focused rewards
+            "gesture_during_touch": 8.0,  # HIGH reward for gestures while hand is on robot
             "petting_response": 5.0,        # High reward for gestures
-            "petting_stability": 0.7,       # Stability during gestures
+            "petting_stability": 1.5,       # Stability during gestures
             "flexible_height": -1.5,         # Allow height variation
             "upright": 0.5,        # Reward for minimal rotation
             
@@ -240,6 +245,8 @@ def main():
     parser.add_argument("--resume", action='store_true')
     parser.add_argument("--resume_path", type=str, default=None)
     parser.add_argument("--params_pkl", type=str, default=None)
+    parser.add_argument("--gesture_during_touch", action='store_true', 
+                        help="Use new mode: train gestures ONLY when hand is on robot")
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
@@ -315,23 +322,15 @@ def main():
             runner.load(resume_path)
 
     with tqdm(total=args.max_iterations, desc="Training Progress") as pbar:
-        # for iteration in range(args.max_iterations):
         runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True, pbar=pbar)
-            # runner.writer.flush()
-            # pbar.update(1)
-
-            # if (iteration + 1) % train_cfg["save_interval"] == 0:
-            #     checkpoint_path = f"{log_dir}/model_{iteration +1}.pt"
-            #     runner.save(checkpoint_path)
-
-    # final_checkpoint = f"{log_dir}/model_final.pt"
-    
-    # runner.save(final_checkpoint)
 
 
 if __name__ == "__main__":
     main()
 
 # Usage:
+# Standard mode (gestures triggered by falling edge after petting):
 # python go2_train_petting.py -e go2-pet --num_envs 1024 --max_iterations 300
-# python go2_train_petting.py -e go2-pet-eval --eval_petting
+#
+# NEW mode (gestures only when hand is ON robot):
+# python go2_train_petting.py -e go2-pet-during-touch --gesture_during_touch --num_envs 1024 --max_iterations 300
