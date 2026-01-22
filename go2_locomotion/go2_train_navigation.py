@@ -167,7 +167,7 @@ def get_navigation_cfgs(curriculum_stage=1):
 
         reward_cfg["tracking_sigma"] = 0.25
         reward_cfg["reward_scales"]["upright"] = 1.5
-        reward_cfg["reward_scales"]["height"] = -2.0
+        reward_cfg["reward_scales"]["height"] = 2.0
 
         reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.5
         reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.2
@@ -187,14 +187,14 @@ def get_navigation_cfgs(curriculum_stage=1):
 
         reward_cfg["reward_scales"]["upright"] = 3.5    # 5.0
         reward_cfg["reward_scales"]["height"] = -2.0    # -3.5
-        reward_cfg["reward_scales"]["symmetry"] = -0.05
+        reward_cfg["reward_scales"]["symmetry"] = 0
         # Add these essential walking rewards:
         reward_cfg["reward_scales"]["forward_movement"] = 2.5
         reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.7
         reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.3
-        reward_cfg["reward_scales"]["action_rate"] = -0.1              # Smooth gait
-        reward_cfg["reward_scales"]["lin_vel_z"] = 0               # No bouncing
-        reward_cfg["reward_scales"]["similar_to_default"] = -0.01       # Stay reasonable
+        reward_cfg["reward_scales"]["action_rate"] = -0.5              # Smooth gait (increased from -0.1)
+        reward_cfg["reward_scales"]["lin_vel_z"] = -2.0            # Penalize bouncing (was 0)
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.1       # Prevent crawling (increased from -0.01)
 
         env_cfg["episode_length_s"] = 20.0
         env_cfg["use_obstacles"] = False

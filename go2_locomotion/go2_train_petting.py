@@ -121,8 +121,8 @@ def get_petting_cfgs():
         'petting_duration': 150,  # Duration of petting force application (3s at 50Hz)
 
         'gesture_wave_speed_divisor': 8.0,  # Controls speed of waving gesture
-        'gesture_wave_amplitude_hip': 0.1,    # Amplitude of waving gesture
-        'gesture_wave_amplitude_thigh_calf': 0.05,
+        'gesture_wave_amplitude_hip': 0.3,    # Amplitude of waving gesture
+        'gesture_wave_amplitude_thigh_calf': 0.2,
         # camera visualization
         "visualize_camera": True,
     }
@@ -142,10 +142,10 @@ def get_petting_cfgs():
         "base_height_target": 0.42,  # Slightly lower for petting
         "reward_scales": {
             # Petting-focused rewards
-            "gesture_during_touch": 8.0,  # HIGH reward for gestures while hand is on robot
+            "gesture_during_touch": 0,  # HIGH reward for gestures while hand is on robot
             "petting_response": 5.0,        # High reward for gestures
             "petting_stability": 1.5,       # Stability during gestures
-            "flexible_height": -1.5,         # Allow height variation
+            "flexible_height": 1.5,         # Allow height variation
             "upright": 0.5,        # Reward for minimal rotation
             
             # Very reduced base rewards

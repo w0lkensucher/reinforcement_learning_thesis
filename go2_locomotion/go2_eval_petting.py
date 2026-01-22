@@ -75,7 +75,7 @@ def main():
     reward_cfg["reward_scales"] = {}
     env_cfg["episode_length_s"] = 60.0
 
-    max_sim_step = int(env_cfg["episode_length_s"] * 30)
+    max_sim_step = int(env_cfg["episode_length_s"] * 50)
 
     # Override petting settings for evaluation
     if args.manual_petting:

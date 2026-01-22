@@ -4,27 +4,6 @@ import numpy as np
 from go2_env_base import Go2BaseEnv
 
 class Go2PettingEnv(Go2BaseEnv):
-    """
-    Go2 Petting Environment - Trains robot to respond to physical petting interactions.
-    
-    TWO TRAINING MODES:
-    
-    1. STANDARD MODE (default, gesture_during_touch_mode=False):
-       - Hand touching robot head acts as a TRIGGER
-       - When hand is REMOVED (falling edge), robot performs a gesture response
-       - Gestures happen AFTER petting ends
-       - Rewards: petting_response, petting_stability, etc.
-       
-    2. GESTURE-DURING-TOUCH MODE (gesture_during_touch_mode=True):
-       - Robot performs gestures ONLY when hand is actively ON the robot
-       - Hand must remain in contact for gestures to continue
-       - When hand is removed, gestures stop
-       - Rewards: gesture_during_touch (requires both touch AND gesture active)
-       - Other rewards should be set to 0 to focus only on this behavior
-       
-    Configure via env_cfg['gesture_during_touch_mode'] = True/False
-    """
-    
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
             # Initialize base environment FIRST
             super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
@@ -474,17 +453,17 @@ class Go2PettingEnv(Go2BaseEnv):
 
 
     def _reward_flexible_height(self):
-        """Petting-specific height control - allow sitting, lying"""
+        """Petting-specific height control"""
         base_height = self.base_pos[:, 2]
         
         # Different target heights for different behaviors
         if (self.gesture_timer > 0).any() or self.head_touched.any():
             # During gestures, allow more height variation
-            tolerance = 0.4
+            tolerance = 0.1
             target_height = self.reward_cfg.get("base_height_target", 0.35)  # Slightly lower for better petting access
         else:
             # Normal standing posture
-            tolerance = 0.1
+            tolerance = 0.05
             target_height = 0.42
         
         height_error = torch.abs(base_height - target_height)
