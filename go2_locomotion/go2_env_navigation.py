@@ -4,11 +4,12 @@ import numpy as np
 from go2_env_base import Go2BaseEnv
 
 class Go2NavigationEnv(Go2BaseEnv):
-    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, wind_force=False, uneven_terrain=False, show_viewer=False):
+    def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, wind_force=False, uneven_terrain=False, show_viewer=False, dynamic_obstacles=False):
         super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
         
         self.wind_force = wind_force
         self.uneven_terrain = uneven_terrain
+        self.dynamic_obstacles = dynamic_obstacles
         self.obstacle_entities = []
         self.obstacle_positions = []
 
@@ -33,7 +34,6 @@ class Go2NavigationEnv(Go2BaseEnv):
         # optional camera
         if self.env_cfg.get("visualize_camera", True):
             self.cam = self.scene.add_camera(
-                # res=(960, 540),
                 res=(1920, 1080),
                 pos=(4.0, 0.0, 4.0),
                 lookat=(0, 0, 1.0),
@@ -345,54 +345,73 @@ class Go2NavigationEnv(Go2BaseEnv):
     def _create_obstacles(self):
         """Create obstacles in the environment"""
         if not self.env_cfg.get('use_obstacles', False):
+            print("use_obstacles is False")
             return
         try:
-            terrain_size = self.env_cfg['terrain_size']
-            density = self.env_cfg['obstacle_density']
-            clear_radius = self.env_cfg['clear_radius']
+            if not self.dynamic_obstacles:
+                terrain_size = self.env_cfg['terrain_size']
+                density = self.env_cfg['obstacle_density']
+                clear_radius = self.env_cfg['clear_radius']
 
-            area = terrain_size[0] * terrain_size[1]
-            num_obstacles = int(area * density)
-            
-            print(f"Creating {num_obstacles} obstacles...")
+                area = terrain_size[0] * terrain_size[1]
+                num_obstacles = int(area * density)
+                
+                print(f"Creating {num_obstacles} obstacles...")
 
-            self.obstacle_positions = []
-            self.obstacle_entities = []
+                for _ in range(num_obstacles):
+                    attempts = 0
+                    while attempts < 50:
+                        x = np.random.uniform(-terrain_size[0]/2, terrain_size[0]/2)
+                        y = np.random.uniform(-terrain_size[1]/2, terrain_size[1]/2)
+                        height = np.random.uniform(*self.env_cfg['obstacle_height_range'])
 
-            for _ in range(num_obstacles):
-                attempts = 0
-                while attempts < 50:
-                    x = np.random.uniform(-terrain_size[0]/2, terrain_size[0]/2)
-                    y = np.random.uniform(-terrain_size[1]/2, terrain_size[1]/2)
-                    height = np.random.uniform(*self.env_cfg['obstacle_height_range'])
+                        robot_spawn = self.env_cfg['base_init_pos'][:2]
+                        dist_to_spawn = np.sqrt((x - robot_spawn[0])**2 + (y - robot_spawn[1])**2)
+                        if dist_to_spawn < clear_radius:
+                            attempts += 1
+                            continue
 
-                    robot_spawn = self.env_cfg['base_init_pos'][:2]
-                    dist_to_spawn = np.sqrt((x - robot_spawn[0])**2 + (y - robot_spawn[1])**2)
-                    if dist_to_spawn < clear_radius:
-                        attempts += 1
-                        continue
+                        too_close = False
+                        for pos in self.obstacle_positions:
+                            dist = np.sqrt((x - pos[0])**2 + (y - pos[1])**2)
+                            if dist < self.env_cfg['obstacle_spacing_min']:
+                                too_close = True
+                                break
 
-                    too_close = False
-                    for pos in self.obstacle_positions:
-                        dist = np.sqrt((x - pos[0])**2 + (y - pos[1])**2)
-                        if dist < self.env_cfg['obstacle_spacing_min']:
-                            too_close = True
+                        if not too_close:
+                            jump_threshold = self.reward_cfg.get('jump_height_threshold', 0.08)
+                            if height < jump_threshold:
+                                obstacle_type = 'low'
+                            else:
+                                obstacle_type = 'high'
+
+                            self.obstacle_positions.append([x, y, height, obstacle_type])
+                            entity = self._add_single_obstacle(x, y, height)
+                            if entity is not None:    
+                                self.obstacle_entities.append(entity)
                             break
 
-                    if not too_close:
-                        jump_threshold = self.reward_cfg.get('jump_height_threshold', 0.08)
-                        if height < jump_threshold:
-                            obstacle_type = 'low'
-                        else:
-                            obstacle_type = 'high'
+                        attempts += 1
 
-                        self.obstacle_positions.append([x, y, height, obstacle_type])
-                        entity = self._add_single_obstacle(x, y, height)
-                        if entity is not None:    
-                            self.obstacle_entities.append(entity)
-                        break
-
-                    attempts += 1
+            else:
+                print("Dynamic obstacles enabled")
+                # Place obstacles in front of robot spawn
+                base_init_pos = self.env_cfg.get('base_init_pos', [0.0, 0.0, 0.42])
+                base_yaw = self.env_cfg.get('base_init_yaw', 0.0)
+                dists = [2.5, 4.5]  # meters ahead
+                for _, dist in enumerate(dists):
+                    width = np.mean(self.env_cfg["obstacle_width_range"])
+                    height = np.mean(self.env_cfg["obstacle_height_range"])
+                    x = base_init_pos[0] + dist * np.cos(base_yaw)
+                    y = base_init_pos[1] + dist * np.sin(base_yaw)
+                    geom = gs.morphs.Box(
+                        pos=(x, y, height / 2),
+                        size=(width, width, height)
+                    )
+                    material = gs.materials.Rigid(friction=0.8)
+                    entity = self.scene.add_entity(geom, material=material)
+                    self.obstacle_entities.append(entity)
+                    self.obstacle_positions.append([x, y, height, "box"])
 
             print(f"Successfully created {len(self.obstacle_positions)} obstacles")
         except Exception as e:

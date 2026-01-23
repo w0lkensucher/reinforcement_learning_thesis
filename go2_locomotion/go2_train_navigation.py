@@ -105,7 +105,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         "termination_if_pitch_greater_than": 7,
         "base_init_pos": [0.0, 0.0, 0.42],
         "base_init_quat": [1.0, 0.0, 0.0, 0.0],
-        "episode_length_s": 25.0,
+        "episode_length_s": 60.0,
         "resampling_time_s": 6.0,
         "action_scale": 0.25,
         "simulate_action_latency": True,
@@ -113,13 +113,13 @@ def get_navigation_cfgs(curriculum_stage=1):
         
         # NAVIGATION-SPECIFIC CONFIG
         'use_obstacles': True,
-        'obstacle_density': 0.02,
+        'obstacle_density': 0.01,
         'obstacle_types': ['box', 'cylinder'],
         'obstacle_height_range': [0.05, 0.15],
         'obstacle_width_range': [0.1, 0.3],
         'obstacle_spacing_min': 1.5,
         'terrain_size': [30.0, 30.0],
-        'clear_radius': 3.0,
+        'clear_radius': 2.0,
         'jump_height_threshold': 0.08,  # Below this = low obstacle (jump)
     }
     
@@ -201,13 +201,24 @@ def get_navigation_cfgs(curriculum_stage=1):
 
     elif curriculum_stage == 3:
         # Stage 3: Basic navigation with obstacles
-        reward_cfg["reward_scales"]["forward_movement"] = 1.0
-        reward_cfg["reward_scales"]["upright_posture"] = 1.0
-        reward_cfg["reward_scales"]["orientation_stability"] = 1.0
-        reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.5
-        reward_cfg["reward_scales"]["obstacle_avoidance"] = 1.0
-        reward_cfg["reward_scales"]["landing_stability"] = 0.5
-        reward_cfg["reward_scales"]["adaptive_base_height"] = 1.0
+        command_cfg["lin_vel_x_range"] = [0.3, 0.6]
+        command_cfg["lin_vel_y_range"] = [-0.2, 0.2]
+        command_cfg["ang_vel_range"] = [-0.2, 0.2]
+    
+        reward_cfg["tracking_sigma"] = 0.25
+
+        reward_cfg["reward_scales"]["upright"] = 3.5    # 5.0
+        reward_cfg["reward_scales"]["height"] = -2.0    # -3.5
+        reward_cfg["reward_scales"]["symmetry"] = -0.05
+        # Add these essential walking rewards:
+        reward_cfg["reward_scales"]["forward_movement"] = 2.5
+        reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.7
+        reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.3
+        reward_cfg["reward_scales"]["action_rate"] = -0.1              # Smooth gait
+        reward_cfg["reward_scales"]["lin_vel_z"] = 0               # No bouncing
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.01
+        reward_cfg["reward_scales"]["obstacle_avoidance"] = 1.0      # Stay reasonable
+        reward_cfg["reward_scales"]["straight_walk_when_clear"] = 0.2
 
         env_cfg["episode_length_s"] = 20.0
         env_cfg["use_obstacles"] = True

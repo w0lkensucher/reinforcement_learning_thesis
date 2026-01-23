@@ -48,6 +48,7 @@ def main():
     parser.add_argument("--obstacles", type=str, choices=["none", "sparse", "slalom", "corridor"], 
                         default="none", help="Type of obstacles to add during evaluation")
     parser.add_argument("--silent", action='store_true', help="Suppress detailed output")
+    parser.add_argument("--dynamic_obstacles", action='store_true', help="Enable dynamic obstacles during evaluation")
     args = parser.parse_args()
 
     gs.init()
@@ -93,6 +94,16 @@ def main():
     else:
         env_cfg["use_obstacles"] = False
 
+    if args.dynamic_obstacles:
+        env_cfg["use_obstacles"] = True
+        env_cfg["obstacle_density"] = 0.0
+        env_cfg["terrain_size"] = [25.0, 25.0]
+        env_cfg["obstacle_types"] = ["box"]
+        env_cfg["obstacle_height_range"] = [0.05, 0.15]
+        env_cfg["obstacle_width_range"] = [0.15, 0.3]
+        env_cfg["obstacle_spacing_min"] = 2.0
+        env_cfg["clear_radius"] = 3.0
+
     if args.silent:
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             env = Go2NavigationEnv(
@@ -102,6 +113,7 @@ def main():
                 reward_cfg=reward_cfg, 
                 command_cfg=command_cfg,
                 show_viewer=True,
+                dynamic_obstacles=args.dynamic_obstacles,
             )
     else:
         env = Go2NavigationEnv(
@@ -111,6 +123,7 @@ def main():
             reward_cfg=reward_cfg, 
             command_cfg=command_cfg,
             show_viewer=True,
+            dynamic_obstacles=args.dynamic_obstacles,
         )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
@@ -134,15 +147,61 @@ def main():
                 file=sys.stdout,
                 dynamic_ncols=True) as pbar:
             
+
             for step in range(max_sim_step):
                 actions = policy(obs)
                 obs, rews, dones, infos = env.step(actions)
-                env.cam.render()
-                reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
 
+                # --- Move two obstacles in front of robot using set_qpos ---
+                if args.dynamic_obstacles:
+                    base_pos = env.base_pos[0].cpu().numpy()
+                    base_yaw = env.base_radians[0, 2].cpu().item()
+                    forward = np.array([np.cos(base_yaw), np.sin(base_yaw)])
+
+                    # Helper to check if robot has passed an obstacle
+                    def has_passed(obs_pos):
+                        rel = np.array([obs_pos[0] - base_pos[0], obs_pos[1] - base_pos[1]])
+                        return np.dot(rel, forward) < -0.5  # Negative means behind robot
+
+                    # Distances for obstacles
+                    dists = [2.5, 4.5]
+                    clear_radius = env.env_cfg.get('clear_radius', 1.0)
+                    for i, dist in enumerate(dists):
+                        obs_qpos = env.obstacle_entities[i].get_qpos()
+                        if hasattr(obs_qpos, 'cpu'):
+                            obs_qpos = obs_qpos.cpu().numpy()
+                        obs_pos = np.array(obs_qpos).flatten()[:2]
+                        if has_passed(obs_pos):
+                            # Place obstacle ahead, but not within clear_radius
+                            x = base_pos[0] + dist * np.cos(base_yaw)
+                            y = base_pos[1] + dist * np.sin(base_yaw)
+                            z = base_pos[2] + 0.1
+                            dist_to_robot = np.sqrt((x - base_pos[0])**2 + (y - base_pos[1])**2)
+                            if dist_to_robot < clear_radius:
+                                # Place farther if too close
+                                offset = clear_radius + 0.5
+                                x = base_pos[0] + (dist + offset) * np.cos(base_yaw)
+                                y = base_pos[1] + (dist + offset) * np.sin(base_yaw)
+                            qpos = np.array([x, y, z, 1, 0, 0, 0], dtype=np.float32)
+                            env.obstacle_entities[i].set_qpos(qpos)
+
+                # --- Camera follow logic ---
+                base_pos = env.base_pos[0].cpu().numpy()  # shape (3,)
+                base_yaw = env.base_radians[0, 2].cpu().item()  # radians
+                cam_height = 7.0   # meters above
+                cam_distance = 3.0 # meters behind
+                cam_side = 1.0     # meters to the right
+                cam_x = base_pos[0] - cam_distance * np.cos(base_yaw) + cam_side * np.sin(base_yaw)
+                cam_y = base_pos[1] - cam_distance * np.sin(base_yaw) - cam_side * np.cos(base_yaw)
+                cam_z = base_pos[2] + cam_height
+                cam_pos = (cam_x, cam_y, cam_z)
+                lookat = (base_pos[0], base_pos[1], base_pos[2])
+                env.cam.set_pose(pos=cam_pos, lookat=lookat)
+                env.cam.render()
+
+                reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
                 if (len(reset_idx) > 0):
                     env.reset_idx(reset_idx)
-                
                 pbar.update(1)
 
         if args.record:

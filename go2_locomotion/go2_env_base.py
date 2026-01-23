@@ -78,7 +78,7 @@ class Go2BaseEnv:
                 enable_collision=True,
                 enable_joint_limit=True,
                 # Set with some headroom above Genesis's calculated maximum
-                max_collision_pairs=500,
+                max_collision_pairs=16000, # Nav requires around 16000, petting was set around 500
             ),
             show_viewer=show_viewer
         )
