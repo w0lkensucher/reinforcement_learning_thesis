@@ -447,7 +447,7 @@ class Go2PettingEnv(Go2BaseEnv):
         stability = torch.exp(-(ang_vel_magnitude + height_deviation * 5))
 
         gesture_active = (self.gesture_timer.float() / self.gesture_duration).clamp(0, 1)
-        stability_reward = stability * 0.1 * gesture_active
+        stability_reward = stability * gesture_active
         
         return stability_reward
 

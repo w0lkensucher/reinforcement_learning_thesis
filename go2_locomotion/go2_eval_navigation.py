@@ -151,6 +151,17 @@ def main():
             for step in range(max_sim_step):
                 actions = policy(obs)
                 obs, rews, dones, infos = env.step(actions)
+                
+                # Update camera to follow robot
+                robot_pos = env.base_pos[0].cpu().numpy()  # Get position of first environment
+                cam_offset = [3.0, 0.0, 2.0]  # Camera offset: behind, side, above
+                env.cam.set_pose(
+                    pos=(robot_pos[0] + cam_offset[0], robot_pos[1] + cam_offset[1], robot_pos[2] + cam_offset[2]),
+                    lookat=(robot_pos[0], robot_pos[1], robot_pos[2] + 0.3)  # Look at robot's body
+                )
+                
+                env.cam.render()
+                reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
 
                 # --- Move two obstacles in front of robot using set_qpos ---
                 if args.dynamic_obstacles:
