@@ -160,8 +160,6 @@ def main():
                     lookat=(robot_pos[0], robot_pos[1], robot_pos[2] + 0.3)  # Look at robot's body
                 )
                 
-                env.cam.render()
-                reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
 
                 # --- Move two obstacles in front of robot using set_qpos ---
                 if args.dynamic_obstacles:

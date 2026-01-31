@@ -43,16 +43,16 @@ def get_petting_train_cfg(exp_name, max_iterations):
             "class_name": "PPO",
             "clip_param": 0.2,
             "desired_kl": 0.01,
-            "entropy_coef": 0.01,
+            "entropy_coef": 0.003,  # Reduced from 0.01 to stop over-exploration
             "gamma": 0.99,
             "lam": 0.95,
-            "learning_rate": 2e-4,
-            "max_grad_norm": 1.0,
-            "num_learning_epochs": 10,
-            "num_mini_batches": 4,
+            "learning_rate": 1e-4,
+            "max_grad_norm": 0.5,
+            "num_learning_epochs": 5,
+            "num_mini_batches": 8,
             "schedule": "adaptive",
             "use_clipped_value_loss": True,
-            "value_loss_coef": 1.0,
+            "value_loss_coef": 0.3,
         },
         "policy": {
             "activation": "elu",
@@ -115,14 +115,14 @@ def get_petting_cfgs():
         'gentle_press_range': [0.02, 0.08],
         'gentle_vel_threshold': 0.1,
         'manual_petting': False,
-        "gesture_during_touch_mode": False,  # KEY DIFFERENCE
+        "gesture_during_touch_mode": True,  # Gesture WHILE being petted
 
         'petting_probability': 0.1,  # 10% chance to start petting each step
-        'petting_duration': 150,  # Duration of petting force application (3s at 50Hz)
+        'petting_duration': 250,  # Duration of petting force application (3s at 50Hz)
 
         'gesture_wave_speed_divisor': 8.0,  # Controls speed of waving gesture
-        'gesture_wave_amplitude_hip': 0.2,    # Amplitude of waving gesture
-        'gesture_wave_amplitude_thigh_calf': 0.1,
+        'gesture_wave_amplitude_hip': 0.4,    # Amplitude of waving gesture
+        'gesture_wave_amplitude_thigh_calf': 0.2,
         # camera visualization
         "visualize_camera": True,
     }
@@ -142,26 +142,26 @@ def get_petting_cfgs():
         "base_height_target": 0.42,  # Slightly lower for petting
         "reward_scales": {
             # Petting-focused rewards
-            "gesture_during_touch": 0,  # HIGH reward for gestures while hand is on robot
-            "petting_response": 5.0,        # High reward for gestures
-            "petting_stability": 0.15,       # Stability during gestures
+            "gesture_during_touch": 5.0,  # HIGH reward for gestures while hand is on robot
+            "petting_response": 0,        # High reward for gestures
+            "petting_stability": 1.5,       # Stability during gestures
             "flexible_height": 1.5,         # Allow height variation
             "upright": 0.5,        # Reward for minimal rotation
             
-            # Very reduced base rewards
-            "tracking_lin_vel": 0.5,
-            "tracking_ang_vel": 0.2,
+            # Very reduced base rewards (minimal since commands are zero)
+            "tracking_lin_vel": 0.1,
+            "tracking_ang_vel": 0.05,
             "lin_vel_z": 0,             # Penalize vertical movement
-            "action_rate": -0.5,           # Penalize rapid changes
-            "similar_to_default": -0.7,    # Allow gesture poses
+            "action_rate": -0.05,          # Very light penalty (gestures need action changes)
+            "similar_to_default": -0.05,   # Very light (gestures deviate from default)
         },
     }
     
     command_cfg = {
         "num_commands": 3,
-        "lin_vel_x_range": [-0.1, 0.1],  # Slower, gentle movement
-        "lin_vel_y_range": [-0.1, 0.1],  # Minimal lateral
-        "ang_vel_range": [-0.1, 0.1],    # Gentle turning
+        "lin_vel_x_range": [-0.01, 0.01],  # Slower, gentle movement
+        "lin_vel_y_range": [-0.01, 0.01],  # Minimal lateral
+        "ang_vel_range": [-0.01, 0.01],    # Gentle turning
     }
     
     return env_cfg, obs_cfg, reward_cfg, command_cfg
@@ -322,7 +322,9 @@ def main():
             runner.load(resume_path)
 
     with tqdm(total=args.max_iterations, desc="Training Progress") as pbar:
-        runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True, pbar=pbar)
+        # Pass resume_flag to prevent overwriting starting checkpoint
+        is_resuming = args.resume or (args.resume_path is not None)
+        runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True, pbar=pbar, resume_flag=is_resuming)
 
 
 if __name__ == "__main__":

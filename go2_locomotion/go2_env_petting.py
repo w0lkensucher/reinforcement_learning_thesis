@@ -387,9 +387,10 @@ class Go2PettingEnv(Go2BaseEnv):
             current_head_pos = head_world_positions[env_id]
             
             if self.is_being_petted[env_id]:
-                # Position hand close to head, allow physics for realistic contact
-                target_pos = current_head_pos + torch.tensor([0.0, 0.0, 0.08], device=self.device)
-                self._move_hand_to_position(env_id, target_pos, zero_velocity=False)
+                # Position hand on the head with minimal offset (1.5cm = hand resting on head)
+                # Use zero_velocity=True to lock hand on head and follow robot movement
+                target_pos = current_head_pos + torch.tensor([0.0, 0.0, 0.015], device=self.device)
+                self._move_hand_to_position(env_id, target_pos, zero_velocity=True)
             else:
                 # Keep hand well above when not petting
                 target_pos = current_head_pos + torch.tensor([0.0, 0.0, self.hand_rest_height], device=self.device)
@@ -503,7 +504,7 @@ class Go2PettingEnv(Go2BaseEnv):
             self.gesture_timer = torch.where(
                 touching_now,
                 torch.full_like(self.gesture_timer, self.gesture_duration),  # Keep timer active
-                torch.clamp(self.gesture_timer - 1, 0, self.gesture_duration)  # Decay when not touching
+                torch.zeros_like(self.gesture_timer)  # Immediate stop when not touching
             )
         
         # Add gesture adjustments to learned actions (not replace!)

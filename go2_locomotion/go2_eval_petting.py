@@ -47,8 +47,6 @@ def main():
                         help="Manually trigger petting every N steps")
     parser.add_argument("--petting_interval", type=int, default=500,
                         help="Steps between manual petting events")
-    parser.add_argument("--petting_duration", type=int, default=50,
-                        help="Duration of manual petting events in steps")
     parser.add_argument("--petting_frequency", type=float, default= 0.01, # 0.01 = 1% chance per step
                         help="Probability of petting event per step (if not manual)")
     parser.add_argument("--eval_steps", type=int, default=1000,
@@ -77,12 +75,14 @@ def main():
 
     max_sim_step = int(env_cfg["episode_length_s"] * 50)
 
+    petting_duration = env_cfg.get("petting_duration", 50)
+    
     # Override petting settings for evaluation
     if args.manual_petting:
         env_cfg["petting_probability"] = 0.0  # Disable automatic petting
         env_cfg["manual_petting"] = True
         if not args.silent:
-            print(f"🖐️ Manual petting mode: every {args.petting_interval} steps for {args.petting_duration} steps")
+            print(f"🖐️ Manual petting mode: every {args.petting_interval} steps for {petting_duration} steps")
     else:
         env_cfg["petting_probability"] = args.petting_frequency
         if not args.silent:
@@ -133,16 +133,16 @@ def main():
             for step in range(max_sim_step):
                 if args.manual_petting:
                     if step % args.petting_interval == 0:
-                        manual_petting_timer = args.petting_duration
+                        manual_petting_timer = petting_duration
                         petting_events += 1
                         env.trigger_manual_petting(env_id=0, duration_steps=manual_petting_timer)
                         if not args.silent:
-                            print(f"🖐️ Manual petting started at step {step} for {args.petting_duration} steps")
+                            print(f"🖐️ Manual petting started at step {step} for {petting_duration} steps")
                     
                     if manual_petting_timer > 0:
                         manual_petting_timer -= 1
                     
-                    if manual_petting_timer == 0 and step % args.petting_interval == args.petting_duration:
+                    if manual_petting_timer == 0 and step % args.petting_interval == petting_duration:
                         if not args.silent:
                             print(f"🖐️ Manual petting ended at step {step}")
 
@@ -159,7 +159,7 @@ def main():
         if args.record:
             print("🎥 Stopping recording...")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-                env.cam.stop_recording(save_to_filename=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.exp_name}.mp4",fps=30)
+                env.cam.stop_recording(save_to_filename=f"videos/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.exp_name}.mp4",fps=30)
                     
     print(f"✅ Evaluation complete! Total petting events: {petting_events}")
 
