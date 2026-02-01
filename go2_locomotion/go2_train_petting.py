@@ -43,7 +43,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
             "class_name": "PPO",
             "clip_param": 0.2,
             "desired_kl": 0.01,
-            "entropy_coef": 0.003,  # Reduced from 0.01 to stop over-exploration
+            "entropy_coef": 0.01,
             "gamma": 0.99,
             "lam": 0.95,
             "learning_rate": 1e-4,
@@ -70,7 +70,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
         },
         "num_steps_per_env": 32,  # Longer episodes for petting
         "save_interval": 50,
-        "empirical_normalization": None,
+        "empirical_normalization": True,
         "seed": 8, # set to different seeds for multiple runs
     }
 
@@ -102,13 +102,14 @@ def get_petting_cfgs():
         "kd": 0.5,
         "termination_if_roll_greater_than": 45,
         "termination_if_pitch_greater_than": 45,
+        "termination_if_base_height_lower_than": 0.2,
         "base_init_pos": [0.0, 0.0, 0.42],
         "base_init_quat": [1.0, 0.0, 0.0, 0.0],
         "episode_length_s": 20.0,  # Longer episodes for multiple gesture completions
         "resampling_time_s": 10.0,  # Longer command duration
         "action_scale": 0.25,
         "simulate_action_latency": True,
-        "clip_actions": 1.0,
+        "clip_actions": 2.0,  # Increased to allow room for gesture adjustments on top of policy actions
         
         # PETTING-SPECIFIC CONFIG
         'gentle_speed_threshold': 0.3,
@@ -117,12 +118,12 @@ def get_petting_cfgs():
         'manual_petting': False,
         "gesture_during_touch_mode": True,  # Gesture WHILE being petted
 
-        'petting_probability': 0.1,  # 10% chance to start petting each step
+        'petting_probability': 0.3,  # 30% chance - more frequent petting reduces reward variance
         'petting_duration': 250,  # Duration of petting force application (3s at 50Hz)
 
         'gesture_wave_speed_divisor': 8.0,  # Controls speed of waving gesture
-        'gesture_wave_amplitude_hip': 0.4,    # Amplitude of waving gesture
-        'gesture_wave_amplitude_thigh_calf': 0.2,
+        'gesture_wave_amplitude_hip': 0.6,    # Amplitude of waving gesture
+        'gesture_wave_amplitude_thigh_calf': 0.3,
         # camera visualization
         "visualize_camera": True,
     }
@@ -141,12 +142,12 @@ def get_petting_cfgs():
         "tracking_sigma": 0.25,
         "base_height_target": 0.42,  # Slightly lower for petting
         "reward_scales": {
-            # Petting-focused rewards
-            "gesture_during_touch": 5.0,  # HIGH reward for gestures while hand is on robot
-            "petting_response": 0,        # High reward for gestures
-            "petting_stability": 1.5,       # Stability during gestures
-            "flexible_height": 1.5,         # Allow height variation
-            "upright": 0.5,        # Reward for minimal rotation
+            # Petting-focused rewards (scaled down with increased petting frequency)
+            "gesture_during_touch": 2.0,  # Reduced from 5.0 (more frequent petting)
+            "petting_response": 0,        
+            "petting_stability": 1.2,      # Reduced from 3.0
+            "flexible_height": 0.5,        # Reduced from 1.0
+            "upright": 0.5,                # Reduced from 1.0
             
             # Very reduced base rewards (minimal since commands are zero)
             "tracking_lin_vel": 0.1,

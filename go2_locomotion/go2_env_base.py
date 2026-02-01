@@ -171,9 +171,21 @@ class Go2BaseEnv:
         pitch_thresh_rad = self.env_cfg["termination_if_pitch_greater_than"] * 3.14159 / 180.0
         roll_thresh_rad = self.env_cfg["termination_if_roll_greater_than"] * 3.14159 / 180.0
         
-        self.reset_buf |= torch.abs(self.base_radians[:, 1]) > pitch_thresh_rad
-        self.reset_buf |= torch.abs(self.base_radians[:, 0]) > roll_thresh_rad
-        self.reset_buf |= self.base_pos[:, 2] < self.env_cfg.get("termination_if_base_height_lower_than", 0.30)
+        # Debug termination triggers
+        pitch_violations = torch.abs(self.base_radians[:, 1]) > pitch_thresh_rad
+        roll_violations = torch.abs(self.base_radians[:, 0]) > roll_thresh_rad
+        height_violations = self.base_pos[:, 2] < self.env_cfg.get("termination_if_base_height_lower_than", 0.30)
+        
+        # if pitch_violations.any():
+        #     print(f"PITCH termination: {self.base_radians[pitch_violations, 1] * 180/3.14159}")
+        # if roll_violations.any():
+        #     print(f"ROLL termination: {self.base_radians[roll_violations, 0] * 180/3.14159}")
+        # if height_violations.any():
+        #     print(f"HEIGHT termination: {self.base_pos[height_violations, 2]}")
+        
+        self.reset_buf |= pitch_violations
+        self.reset_buf |= roll_violations
+        self.reset_buf |= height_violations
 
         time_out_idx = (self.episode_length_buf > self.max_episode_length).nonzero(as_tuple=False).reshape((-1,))
         self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=gs.device, dtype=gs.tc_float)

@@ -72,11 +72,12 @@ def main():
     # Disable training rewards for pure behavior evaluation
     reward_cfg["reward_scales"] = {}
     env_cfg["episode_length_s"] = 60.0
+    env_cfg["termination_if_base_height_lower_than"] = 0.20  # Override old config
 
     max_sim_step = int(env_cfg["episode_length_s"] * 50)
 
     petting_duration = env_cfg.get("petting_duration", 50)
-    
+
     # Override petting settings for evaluation
     if args.manual_petting:
         env_cfg["petting_probability"] = 0.0  # Disable automatic petting
