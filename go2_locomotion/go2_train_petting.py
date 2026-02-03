@@ -70,7 +70,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
         },
         "num_steps_per_env": 32,  # Longer episodes for petting
         "save_interval": 50,
-        "empirical_normalization": True,
+        "empirical_normalization": None,
         "seed": 8, # set to different seeds for multiple runs
     }
 
@@ -144,17 +144,19 @@ def get_petting_cfgs():
         "reward_scales": {
             # Petting-focused rewards (scaled down with increased petting frequency)
             "gesture_during_touch": 2.0,  # Reduced from 5.0 (more frequent petting)
-            "petting_response": 0,        
-            "petting_stability": 1.2,      # Reduced from 3.0
-            "flexible_height": 0.5,        # Reduced from 1.0
-            "upright": 0.5,                # Reduced from 1.0
+            "petting_response": 0,        # Set to 0, as gesture_during_touch handles this
+            "gesture_movement": 5.0,       # INCREASED: Make movement much more rewarding than stability
+            "petting_stability": 0,      # REDUCED: Prioritize movement over stability during gestures
+            "flexible_height": 7.0,        # INCREASED: Strongly enforce standing height
+            "upright": 0.5,                # Keep moderate
+            "no_sitting": -10.0,            # New reward to discourage sitting
             
             # Very reduced base rewards (minimal since commands are zero)
             "tracking_lin_vel": 0.1,
             "tracking_ang_vel": 0.05,
             "lin_vel_z": 0,             # Penalize vertical movement
-            "action_rate": -0.05,          # Very light penalty (gestures need action changes)
-            "similar_to_default": -0.05,   # Very light (gestures deviate from default)
+            "action_rate": -0.2,          # Very light penalty (gestures need action changes)
+            "similar_to_default": -0.1, # Very light (gestures deviate from default)
         },
     }
     

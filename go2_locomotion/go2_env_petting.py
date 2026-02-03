@@ -389,7 +389,7 @@ class Go2PettingEnv(Go2BaseEnv):
             if self.is_being_petted[env_id]:
                 # Position hand on the head with minimal offset (1.5cm = hand resting on head)
                 # Use zero_velocity=True to lock hand on head and follow robot movement
-                target_pos = current_head_pos + torch.tensor([0.0, 0.0, 0.015], device=self.device)
+                target_pos = current_head_pos + torch.tensor([0.0, 0.0, 0.01], device=self.device)
                 self._move_hand_to_position(env_id, target_pos, zero_velocity=True)
             else:
                 # Keep hand well above when not petting
@@ -439,6 +439,59 @@ class Go2PettingEnv(Go2BaseEnv):
         return reward.float() * progress
 
 
+    def _reward_gesture_movement(self):
+        """Reward joint movement during gestures with gradient standing bonus"""
+        gesture_active = self.gesture_timer > 0
+        
+        # Check height at front AND rear of robot to prevent tilted sitting
+        base_height = self.base_pos[:, 2]
+        pitch = self.base_radians[:, 1]  # Forward/backward tilt
+        
+        # Approximate front/rear heights (base is ~0.2m from front/rear)
+        front_height = base_height + 0.2 * torch.sin(pitch)
+        rear_height = base_height - 0.2 * torch.sin(pitch)
+        
+        # Use minimum height (prevents tilted sitting exploit)
+        min_height = torch.min(front_height, rear_height)
+        
+        # Smooth standing multiplier: 0 at 35cm, 1 at 40cm+
+        standing_multiplier = torch.clamp((min_height - 0.35) / 0.05, 0.0, 1.0)
+        
+        # Measure actual joint velocity - gestures should cause movement
+        front_leg_joints = [0, 1, 2, 3, 4, 5]  # FR and FL
+        rear_hip_joints = [6, 9]  # RL_hip, RR_hip
+        gesture_joints = front_leg_joints + rear_hip_joints
+        
+        joint_vel_magnitude = torch.sum(torch.abs(self.dof_vel[:, gesture_joints]), dim=1)
+        
+        # Reward scales with height: full reward when standing, reduced when low
+        return gesture_active.float() * standing_multiplier * joint_vel_magnitude
+
+
+    def _reward_no_sitting(self):
+        """Penalty for sitting - checks rear leg configuration directly"""
+        # Rear thigh joints in joint order: RR_thigh (index 7), RL_thigh (index 10)
+        # Default standing: RL/RR_thigh = 1.0 rad
+        # Sitting: thighs bend forward significantly (>1.5 rad typically)
+        rr_thigh = self.dof_pos[:, 7]
+        rl_thigh = self.dof_pos[:, 10]
+        
+        # Check if rear thighs are in sitting configuration
+        # Sitting = thighs bent significantly more than default
+        sitting_threshold = 1.5  # rad (default is 1.0)
+        rr_sitting = rr_thigh > sitting_threshold
+        rl_sitting = rl_thigh > sitting_threshold
+        
+        # Penalize if either rear leg is sitting
+        sitting = rr_sitting | rl_sitting
+        
+        # Also check base height as secondary check
+        base_too_low = self.base_pos[:, 2] < 0.35
+        
+        # Sitting if legs are bent OR base is too low
+        return 1.0 * (sitting | base_too_low).float()
+
+
     def _reward_petting_stability(self):
         """Reward for maintaining stability during petting gestures"""
         # Reward stability during gesture
@@ -454,19 +507,20 @@ class Go2PettingEnv(Go2BaseEnv):
 
 
     def _reward_flexible_height(self):
-        """Petting-specific height control"""
+        """Petting-specific height control - enforce standing during gestures"""
         base_height = self.base_pos[:, 2]
+        gesture_active = self.gesture_timer > 0
+
+        target_height_val = self.env_cfg.get('base_height_target', 0.42)
         
-        # Different target heights for different behaviors
-        if (self.gesture_timer > 0).any() or self.head_touched.any():
-            # During gestures, allow more height variation
-            tolerance = 0.1
-            target_height = self.reward_cfg.get("base_height_target", 0.35)  # Slightly lower for better petting access
-        else:
-            # Normal standing posture
-            tolerance = 0.05
-            target_height = 0.42
+        # Per-environment height targets
+        target_height = torch.where(
+            gesture_active,
+            torch.full_like(base_height, 0.40),  # Standing during gestures (40cm)
+            torch.full_like(base_height, target_height_val)   # Normal standing (42cm)
+        )
         
+        tolerance = 0.02  # 2cm tolerance
         height_error = torch.abs(base_height - target_height)
         return torch.exp(-10 * torch.clamp(height_error - tolerance, min=0.0))
     
@@ -489,6 +543,8 @@ class Go2PettingEnv(Go2BaseEnv):
         if self.manual_petting_active.any():
             # Apply manual petting (for testing/debugging)
             self._apply_manual_petting()
+            # Check for head petting detection
+            self._check_head_petting()
         else:
             # Apply random petting
             self._apply_random_petting_forces()
@@ -501,6 +557,12 @@ class Go2PettingEnv(Go2BaseEnv):
             # In this mode, gestures activate DURING touching, not after
             # The gesture_timer activates when hand is ON the robot
             touching_now = self.head_touched
+            # if touching_now.any():
+            #     print(f"[DEBUG] Touching detected in envs: {touching_now.nonzero().flatten().tolist()}")
+            #     print(f"[DEBUG] Gesture timer values: {self.gesture_timer[touching_now].tolist()}")
+            # else:
+            #     print(f"[DEBUG] No touching detected.")
+
             self.gesture_timer = torch.where(
                 touching_now,
                 torch.full_like(self.gesture_timer, self.gesture_duration),  # Keep timer active
