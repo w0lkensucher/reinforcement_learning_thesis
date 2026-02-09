@@ -673,6 +673,66 @@ class Go2NavigationEnv(Go2BaseEnv):
         return collision_penalty
     
     
+    def _reposition_dynamic_obstacles(self):
+        """Reposition dynamic obstacles in front of robot when passed during training"""
+        if len(self.obstacle_entities) < 2:
+            return
+            
+        for env_idx in range(self.num_envs):
+            base_pos = self.base_pos[env_idx].cpu().numpy()
+            base_yaw = self.base_radians[env_idx, 2].cpu().item()
+            forward = np.array([np.cos(base_yaw), np.sin(base_yaw)])
+            
+            # Helper to check if robot has passed an obstacle
+            def has_passed(obs_pos):
+                rel = np.array([obs_pos[0] - base_pos[0], obs_pos[1] - base_pos[1]])
+                return np.dot(rel, forward) < -0.5  # Negative means behind robot
+            
+            # Distances for obstacles
+            dists = [2.5, 4.5]
+            clear_radius = self.env_cfg.get('clear_radius', 1.0)
+            
+            for i, dist in enumerate(dists):
+                if i >= len(self.obstacle_entities):
+                    break
+                    
+                # Get obstacle position
+                obs_qpos = self.obstacle_entities[i].get_qpos()
+                if hasattr(obs_qpos, 'cpu'):
+                    obs_qpos = obs_qpos.cpu().numpy()
+                    
+                # Handle multi-env case - get position for this environment
+                if obs_qpos.ndim > 1 and len(obs_qpos) > env_idx:
+                    obs_pos = obs_qpos[env_idx].flatten()[:2]
+                else:
+                    obs_pos = obs_qpos.flatten()[:2]
+                
+                if has_passed(obs_pos):
+                    # Place obstacle ahead, but not within clear_radius
+                    x = base_pos[0] + dist * np.cos(base_yaw)
+                    y = base_pos[1] + dist * np.sin(base_yaw)
+                    z = base_pos[2] + 0.1
+                    
+                    dist_to_robot = np.sqrt((x - base_pos[0])**2 + (y - base_pos[1])**2)
+                    if dist_to_robot < clear_radius:
+                        # Place farther if too close
+                        offset = clear_radius + 0.5
+                        x = base_pos[0] + (dist + offset) * np.cos(base_yaw)
+                        y = base_pos[1] + (dist + offset) * np.sin(base_yaw)
+                    
+                    # Set new position for this specific environment
+                    new_pos = torch.tensor([x, y, z], device=self.device, dtype=torch.float32)
+                    self.obstacle_entities[i].set_pos(
+                        new_pos.unsqueeze(0),
+                        envs_idx=torch.tensor([env_idx], device=self.device)
+                    )
+                    
+                    # Update tracking for this environment
+                    height = self.env_cfg.get('obstacle_height_range', [0.05, 0.15])
+                    height = np.mean(height)
+                    self.obstacle_positions[i] = [x, y, height, "box"]
+
+
     # Computation Helpers
     def _compute_rewards(self):
         """Navigation-specific reward computation"""
@@ -699,6 +759,10 @@ class Go2NavigationEnv(Go2BaseEnv):
         self._check_termination()
 
         self.reset_idx(self.reset_buf.nonzero(as_tuple=False).reshape(-1))
+
+        # Dynamic obstacle repositioning during training
+        if self.dynamic_obstacles:
+            self._reposition_dynamic_obstacles()
 
         self._compute_rewards()
 
