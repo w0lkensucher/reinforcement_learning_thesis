@@ -56,8 +56,10 @@ def main():
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = pickle.load(open(f"logs/{args.exp_name}/cfgs.pkl", "rb"))
     reward_cfg["reward_scales"] = {}
-
-    max_sim_step = int(env_cfg["episode_length_s"] * 50) 
+    
+    # max_sim_step = int(env_cfg["episode_length_s"] * 30) 
+    episode_length_s = 60
+    max_sim_step = int(episode_length_s * 30)  # Assuming 30 steps per second
 
     if args.obstacles != "none":
         env_cfg["use_obstacles"] = True
@@ -159,40 +161,6 @@ def main():
                     pos=(robot_pos[0] + cam_offset[0], robot_pos[1] + cam_offset[1], robot_pos[2] + cam_offset[2]),
                     lookat=(robot_pos[0], robot_pos[1], robot_pos[2] + 0.3)  # Look at robot's body
                 )
-                
-
-                # --- Move two obstacles in front of robot using set_qpos ---
-                if args.dynamic_obstacles:
-                    base_pos = env.base_pos[0].cpu().numpy()
-                    base_yaw = env.base_radians[0, 2].cpu().item()
-                    forward = np.array([np.cos(base_yaw), np.sin(base_yaw)])
-
-                    # Helper to check if robot has passed an obstacle
-                    def has_passed(obs_pos):
-                        rel = np.array([obs_pos[0] - base_pos[0], obs_pos[1] - base_pos[1]])
-                        return np.dot(rel, forward) < -0.5  # Negative means behind robot
-
-                    # Distances for obstacles
-                    dists = [2.5, 4.5]
-                    clear_radius = env.env_cfg.get('clear_radius', 1.0)
-                    for i, dist in enumerate(dists):
-                        obs_qpos = env.obstacle_entities[i].get_qpos()
-                        if hasattr(obs_qpos, 'cpu'):
-                            obs_qpos = obs_qpos.cpu().numpy()
-                        obs_pos = np.array(obs_qpos).flatten()[:2]
-                        if has_passed(obs_pos):
-                            # Place obstacle ahead, but not within clear_radius
-                            x = base_pos[0] + dist * np.cos(base_yaw)
-                            y = base_pos[1] + dist * np.sin(base_yaw)
-                            z = base_pos[2] + 0.1
-                            dist_to_robot = np.sqrt((x - base_pos[0])**2 + (y - base_pos[1])**2)
-                            if dist_to_robot < clear_radius:
-                                # Place farther if too close
-                                offset = clear_radius + 0.5
-                                x = base_pos[0] + (dist + offset) * np.cos(base_yaw)
-                                y = base_pos[1] + (dist + offset) * np.sin(base_yaw)
-                            qpos = np.array([x, y, z, 1, 0, 0, 0], dtype=np.float32)
-                            env.obstacle_entities[i].set_qpos(qpos)
 
                 # --- Camera follow logic ---
                 base_pos = env.base_pos[0].cpu().numpy()  # shape (3,)
@@ -216,7 +184,7 @@ def main():
         if args.record:
             print("🎥 Stopping recording...")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-                env.cam.stop_recording(save_to_filename=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.exp_name}.mp4",fps=30)
+                env.cam.stop_recording(save_to_filename=f"videos/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.exp_name}.mp4",fps=30)
 
 if __name__ == "__main__":
     main()

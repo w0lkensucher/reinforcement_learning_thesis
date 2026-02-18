@@ -398,7 +398,7 @@ class Go2NavigationEnv(Go2BaseEnv):
                 # Place obstacles in front of robot spawn
                 base_init_pos = self.env_cfg.get('base_init_pos', [0.0, 0.0, 0.42])
                 base_yaw = self.env_cfg.get('base_init_yaw', 0.0)
-                dists = [2.5, 4.5]  # meters ahead
+                dists = [2.5, 4.5, 6.5]  # meters ahead
                 for _, dist in enumerate(dists):
                     width = np.mean(self.env_cfg["obstacle_width_range"])
                     height = np.mean(self.env_cfg["obstacle_height_range"])
@@ -408,7 +408,8 @@ class Go2NavigationEnv(Go2BaseEnv):
                         pos=(x, y, height / 2),
                         size=(width, width, height)
                     )
-                    material = gs.materials.Rigid(friction=0.8)
+                    # High rho makes obstacles heavy and immovable during collisions
+                    material = gs.materials.Rigid(friction=0.8, rho=10000.0)
                     entity = self.scene.add_entity(geom, material=material)
                     self.obstacle_entities.append(entity)
                     self.obstacle_positions.append([x, y, height, "box"])
@@ -438,7 +439,8 @@ class Go2NavigationEnv(Go2BaseEnv):
                 )
 
             # Material is passed to add_entity, not to the morph
-            material = gs.materials.Rigid(friction=0.8)
+            # High rho makes obstacles heavy and immovable during collisions
+            material = gs.materials.Rigid(friction=0.8, rho=10000.0)
             entity = self.scene.add_entity(geom, material=material)
             return entity
         except Exception as e:
@@ -608,8 +610,60 @@ class Go2NavigationEnv(Go2BaseEnv):
         return straight_reward
     
 
+    def _reward_jump_clearance(self):
+        """Reward for actively jumping over obstacles - with bootstrapping for easier discovery"""
+        if len(self.obstacle_positions) == 0:
+            return torch.zeros(self.num_envs, device=self.device)
+        
+        robot_pos = self.base_pos[:, :2]
+        current_height = self.base_pos[:, 2]
+        vertical_velocity = self.base_lin_vel[:, 2]
+        normal_height = 0.42
+        
+        # Calculate height above normal
+        height_above_normal = current_height - normal_height
+        
+        jump_reward = torch.zeros(self.num_envs, device=self.device)
+        
+        for obs_data in self.obstacle_positions:
+            obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+            obs_height = obs_data[2]
+            
+            # Distance to obstacle
+            to_obstacle = obs_pos.unsqueeze(0) - robot_pos
+            distance = torch.norm(to_obstacle, dim=1)
+            
+            # WIDER detection zone for easier discovery (1.5m → 2.5m)
+            near_obstacle = distance < 2.5
+            approaching = distance < 2.0  # Within 2m
+            
+            # Multi-tiered reward system for bootstrapping:
+            
+            # Tier 1: Reward upward velocity when approaching obstacle (easiest to discover)
+            upward_velocity_reward = torch.clamp(vertical_velocity, 0, 1.0) * 0.3  # Max 0.3
+            tier1 = torch.where(approaching & (vertical_velocity > 0.1), upward_velocity_reward, torch.zeros_like(upward_velocity_reward))
+            
+            # Tier 2: Reward being airborne near obstacle (LOWERED threshold: 5cm → 2cm)
+            is_airborne = height_above_normal > 0.02  # Much easier to trigger
+            airborne_reward = torch.clamp(height_above_normal * 5.0, 0, 1.0)  # Scale height to reward
+            tier2 = torch.where(near_obstacle & is_airborne, airborne_reward, torch.zeros_like(airborne_reward))
+            
+            # Tier 3: Bonus for clearing the obstacle height
+            clearance_height = torch.clamp(height_above_normal - obs_height, 0, 0.2)
+            clearance_reward = (clearance_height / 0.2) * 2.0  # Max 2.0 (increased from 1.0)
+            tier3 = torch.where(near_obstacle & (height_above_normal > obs_height), clearance_reward, torch.zeros_like(clearance_reward))
+            
+            # Combine all tiers
+            jump_reward += tier1 + tier2 + tier3
+        
+        return jump_reward
+    
     def _reward_landing_stability(self):
-        """Landing stability reward"""
+        """Landing stability reward - easier to trigger during and after jumping"""
+        # Return zero if no obstacles
+        if len(self.obstacle_positions) == 0:
+            return torch.zeros(self.num_envs, device=self.device)
+        
         # Detect when robot is airborne or recently landed
         normal_height = None
         
@@ -628,14 +682,41 @@ class Go2NavigationEnv(Go2BaseEnv):
         current_height = self.base_pos[:, 2]
         vertical_velocity = self.base_lin_vel[:, 2]
         
-        # Simple landing detection: above normal height with downward velocity
-        is_landing = (current_height > normal_height + 0.05) & (vertical_velocity < 0)
+        # EXPANDED landing detection (easier to trigger):
+        # Phase 1: Airborne and descending (LOWERED threshold: 5cm → 2cm)
+        is_descending = (current_height > normal_height + 0.02) & (vertical_velocity < 0)
         
-        # Reward low angular velocity during landing
+        # Phase 2: Recently landed (near ground with low vertical velocity)
+        is_grounded = (current_height < normal_height + 0.08) & (torch.abs(vertical_velocity) < 0.3)
+        
+        # Combined: reward during descent AND after landing
+        in_landing_phase = is_descending | is_grounded
+        
+        # Check if robot is near any obstacle (WIDENED: 1.0m → 2.5m)
+        robot_pos = self.base_pos[:, :2]
+        near_obstacle = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        
+        for obs_data in self.obstacle_positions:
+            obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+            
+            # Distance to obstacle
+            to_obstacle = obs_pos.unsqueeze(0) - robot_pos
+            distance = torch.norm(to_obstacle, dim=1)
+            
+            # WIDENED proximity range (1.0m → 2.5m) - catches landing after clearing
+            near_obstacle |= (distance < 2.5)
+        
+        # Reward stability when in landing phase near obstacles
+        is_jump_context = in_landing_phase & near_obstacle
+        
+        # Reward low angular velocity (stability) and low vertical oscillation
         ang_vel_penalty = torch.norm(self.base_ang_vel, dim=1)
-        stability_reward = torch.exp(-ang_vel_penalty)
+        stability_score = torch.exp(-ang_vel_penalty * 2.0)  # More sensitive to rotation
         
-        return torch.where(is_landing, stability_reward * 0.3, torch.zeros_like(current_height))
+        # Scale reward: 0.3 during descent, 0.5 when grounded (encourage settling)
+        reward_scale = torch.where(is_grounded, 0.5, 0.3)
+        
+        return torch.where(is_jump_context, stability_score * reward_scale, torch.zeros_like(current_height))
 
 
     def _reward_obstacle_avoidance(self):
@@ -672,35 +753,83 @@ class Go2NavigationEnv(Go2BaseEnv):
         
         return collision_penalty
     
+
+    def _check_termination(self):
+        """Override base termination to include collision detection"""
+        # Call base class termination checks (pitch, roll, height, time)
+        super()._check_termination()
+        
+        # Add collision termination for navigation (if enabled)
+        if self.env_cfg.get('terminate_on_collision', False) and len(self.obstacle_positions) > 0:
+            robot_pos = self.base_pos[:, :2]
+            
+            for obs_data in self.obstacle_positions:
+                obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+                
+                # Distance to obstacle
+                to_obstacle = obs_pos.unsqueeze(0) - robot_pos
+                distance = torch.norm(to_obstacle, dim=1)
+                
+                # Collision threshold - terminate if robot touches obstacle
+                collision_threshold = self.env_cfg.get('collision_threshold', 0.25)
+                collision_mask = distance < collision_threshold
+                
+                # Set reset buffer for collided environments
+                self.reset_buf |= collision_mask
     
+
     def _reposition_dynamic_obstacles(self):
         """Reposition dynamic obstacles in front of robot when passed during training"""
-        if len(self.obstacle_entities) < 2:
+        if len(self.obstacle_entities) < 3:
             return
             
         for env_idx in range(self.num_envs):
             base_pos = self.base_pos[env_idx].cpu().numpy()
             base_yaw = self.base_radians[env_idx, 2].cpu().item()
-            forward = np.array([np.cos(base_yaw), np.sin(base_yaw)])
+            
+            # Use velocity direction for trajectory prediction if robot is moving
+            base_vel = self.base_lin_vel[env_idx, :2].cpu().numpy()  # X, Y velocity
+            vel_magnitude = np.linalg.norm(base_vel)
+            
+            # If robot is moving, use velocity direction; otherwise use facing direction
+            if vel_magnitude > 0.1:  # Moving threshold
+                trajectory_direction = base_vel / vel_magnitude
+            else:
+                trajectory_direction = np.array([np.cos(base_yaw), np.sin(base_yaw)])
             
             # Helper to check if robot has passed an obstacle
             def has_passed(obs_pos):
                 rel = np.array([obs_pos[0] - base_pos[0], obs_pos[1] - base_pos[1]])
-                return np.dot(rel, forward) < -0.5  # Negative means behind robot
+                return np.dot(rel, trajectory_direction) < -0.5  # Negative means behind robot
             
             # Distances for obstacles
-            dists = [2.5, 4.5]
+            dists = [2.5, 4.5, 6.5]
             clear_radius = self.env_cfg.get('clear_radius', 1.0)
             
+            # First check if the last obstacle (index 2) has been passed
+            last_obs_qpos = self.obstacle_entities[2].get_qpos()
+            if hasattr(last_obs_qpos, 'cpu'):
+                last_obs_qpos = last_obs_qpos.cpu().numpy()
+            
+            if last_obs_qpos.ndim > 1 and len(last_obs_qpos) > env_idx:
+                last_obs_pos = last_obs_qpos[env_idx].flatten()[:2]
+            else:
+                last_obs_pos = last_obs_qpos.flatten()[:2]
+            
+            # Only reposition if last obstacle has been passed
+            if not has_passed(last_obs_pos):
+                continue
+            
+            # Now find and reposition the first obstacle that's passed
             for i, dist in enumerate(dists):
                 if i >= len(self.obstacle_entities):
                     break
-                    
+                
                 # Get obstacle position
                 obs_qpos = self.obstacle_entities[i].get_qpos()
                 if hasattr(obs_qpos, 'cpu'):
                     obs_qpos = obs_qpos.cpu().numpy()
-                    
+                
                 # Handle multi-env case - get position for this environment
                 if obs_qpos.ndim > 1 and len(obs_qpos) > env_idx:
                     obs_pos = obs_qpos[env_idx].flatten()[:2]
@@ -708,17 +837,17 @@ class Go2NavigationEnv(Go2BaseEnv):
                     obs_pos = obs_qpos.flatten()[:2]
                 
                 if has_passed(obs_pos):
-                    # Place obstacle ahead, but not within clear_radius
-                    x = base_pos[0] + dist * np.cos(base_yaw)
-                    y = base_pos[1] + dist * np.sin(base_yaw)
+                    # Place obstacle ahead along predicted trajectory
+                    x = base_pos[0] + dist * trajectory_direction[0]
+                    y = base_pos[1] + dist * trajectory_direction[1]
                     z = base_pos[2] + 0.1
                     
                     dist_to_robot = np.sqrt((x - base_pos[0])**2 + (y - base_pos[1])**2)
                     if dist_to_robot < clear_radius:
                         # Place farther if too close
                         offset = clear_radius + 0.5
-                        x = base_pos[0] + (dist + offset) * np.cos(base_yaw)
-                        y = base_pos[1] + (dist + offset) * np.sin(base_yaw)
+                        x = base_pos[0] + (dist + offset) * trajectory_direction[0]
+                        y = base_pos[1] + (dist + offset) * trajectory_direction[1]
                     
                     # Set new position for this specific environment
                     new_pos = torch.tensor([x, y, z], device=self.device, dtype=torch.float32)
@@ -731,6 +860,7 @@ class Go2NavigationEnv(Go2BaseEnv):
                     height = self.env_cfg.get('obstacle_height_range', [0.05, 0.15])
                     height = np.mean(height)
                     self.obstacle_positions[i] = [x, y, height, "box"]
+                    break  # Only reposition the first passed obstacle per step
 
 
     # Computation Helpers

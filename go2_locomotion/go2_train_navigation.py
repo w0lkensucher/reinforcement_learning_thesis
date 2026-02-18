@@ -43,7 +43,7 @@ def get_navigation_train_cfg(exp_name, max_iterations):
             "class_name": "PPO",
             "clip_param": 0.2,
             "desired_kl": 0.01,
-            "entropy_coef": 0.01,
+            "entropy_coef": 0.03,  # Note: Consider increasing to 0.02-0.03 for stage 4
             "gamma": 0.99,
             "lam": 0.95,
             "learning_rate": 0.001,
@@ -69,9 +69,9 @@ def get_navigation_train_cfg(exp_name, max_iterations):
             "resume": False,
         },
         "num_steps_per_env": 24,
-        "save_interval": 100,
+        "save_interval": 50,
         "empirical_normalization": None,
-        "seed": 1, # set to different seeds for multiple runs
+        "seed": 42, # set to different seeds for multiple runs
     }
 
 
@@ -143,6 +143,7 @@ def get_navigation_cfgs(curriculum_stage=1):
             "height",
             "upright",
             "landing_stability",
+            "jump_clearance",
             "lin_vel_z",
             "action_rate",
             "similar_to_default",
@@ -186,15 +187,13 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["tracking_sigma"] = 0.25
 
         reward_cfg["reward_scales"]["upright"] = 3.5    # 5.0
-        reward_cfg["reward_scales"]["height"] = -2.0    # -3.5
-        reward_cfg["reward_scales"]["symmetry"] = 0
+        reward_cfg["reward_scales"]["height"] = 2.0    # -3.5
         # Add these essential walking rewards:
         reward_cfg["reward_scales"]["forward_movement"] = 2.5
         reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.7
         reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.3
-        reward_cfg["reward_scales"]["action_rate"] = -0.5              # Smooth gait (increased from -0.1)
-        reward_cfg["reward_scales"]["lin_vel_z"] = -2.0            # Penalize bouncing (was 0)
-        reward_cfg["reward_scales"]["similar_to_default"] = -0.1       # Prevent crawling (increased from -0.01)
+        reward_cfg["reward_scales"]["action_rate"] = -0.1              # Smooth gait
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.1       # Prevent crawling
 
         env_cfg["episode_length_s"] = 20.0
         env_cfg["use_obstacles"] = False
@@ -208,7 +207,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["tracking_sigma"] = 0.25
 
         reward_cfg["reward_scales"]["upright"] = 3.5    # 5.0
-        reward_cfg["reward_scales"]["height"] = -2.0    # -3.5
+        reward_cfg["reward_scales"]["height"] = 2.0    # -3.5
         reward_cfg["reward_scales"]["symmetry"] = -0.05
         # Add these essential walking rewards:
         reward_cfg["reward_scales"]["forward_movement"] = 2.5
@@ -217,15 +216,61 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["reward_scales"]["action_rate"] = -0.1              # Smooth gait
         reward_cfg["reward_scales"]["lin_vel_z"] = 0               # No bouncing
         reward_cfg["reward_scales"]["similar_to_default"] = -0.01
-        reward_cfg["reward_scales"]["obstacle_avoidance"] = 1.0      # Stay reasonable
-        reward_cfg["reward_scales"]["straight_walk_when_clear"] = 0.2
+        reward_cfg["reward_scales"]["obstacle_avoidance"] = 5.0      # INCREASED: Strong penalty without termination
+        reward_cfg["reward_scales"]["straight_walk_when_clear"] = 0.0  # DISABLED: Conflicts with avoidance learning
 
         env_cfg["episode_length_s"] = 20.0
         env_cfg["use_obstacles"] = True
+        env_cfg["terminate_on_collision"] = False  # Start with penalties only, enable later when avoidance improves
+        # env_cfg["collision_threshold"] = 0.35  # Uncomment to adjust when enabling termination
     
     elif curriculum_stage == 4:
-        # Stage 4: jumping over obstacles
-        reward_cfg["reward_scales"]["forward_movement"] = 1.0
+        # Stage 4: Jumping over low obstacles
+        # RECOMMENDATION: Load from Stage 2 (walking) instead of Stage 3 to avoid avoidance prior
+        command_cfg["lin_vel_x_range"] = [0.3, 0.5]  # REDUCED: Slower approach for better control
+        command_cfg["lin_vel_y_range"] = [-0.05, 0.05]  # Minimal lateral movement
+        command_cfg["ang_vel_range"] = [-0.05, 0.05]    # Minimal turning
+    
+        reward_cfg["tracking_sigma"] = 0.25
+        reward_cfg["jump_height_threshold"] = 0.08  # Obstacles below this = low (jumpable)
+
+        # Stability rewards - maintain from walking
+        reward_cfg["reward_scales"]["upright"] = 3.5  # Keep robot stable
+        reward_cfg["reward_scales"]["height"] = 2.0
+        
+        # Forward progress - REDUCED to make jumping more salient
+        reward_cfg["reward_scales"]["forward_movement"] = 1.5  # REDUCED from 4.0
+        reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.5  # REDUCED from 1.5
+        reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.2  # REDUCED from 0.5
+        
+        # NEW: Jumping rewards - INCREASED to dominate
+        reward_cfg["reward_scales"]["jump_clearance"] = 15.0  # INCREASED from 8.0: Make this the primary signal
+        reward_cfg["reward_scales"]["landing_stability"] = 5.0  # INCREASED from 3.0: Reward stable landings
+        
+        # Penalties - keep smooth
+        reward_cfg["reward_scales"]["action_rate"] = -0.05
+        reward_cfg["reward_scales"]["lin_vel_z"] = -0.1  # REDUCED penalty - allow vertical movement
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.01
+        reward_cfg["reward_scales"]["symmetry"] = -0.05
+        
+        # CRITICAL: DISABLE avoidance - it conflicts with jumping!
+        reward_cfg["reward_scales"]["obstacle_avoidance"] = 0.0  # DISABLED: Was fighting jump learning
+        reward_cfg["reward_scales"]["straight_walk_when_clear"] = 0.0
+
+        # Environment: LOW obstacles only (must jump over, can't go around)
+        env_cfg["episode_length_s"] = 20.0
+        env_cfg["use_obstacles"] = True
+        env_cfg["terminate_on_collision"] = False  # No termination - allow contact during learning
+        env_cfg["obstacle_height_range"] = [0.04, 0.06]  # NARROWER range: easier to learn consistent jump height
+        env_cfg["obstacle_width_range"] = [1.0, 1.5]     # WIDER: absolutely force jumping, no sidestepping
+        env_cfg["obstacle_types"] = ["box"]
+        env_cfg["clear_radius"] = 1.5  # INCREASED: More approach space
+        
+        # Relaxed termination for dynamic jumping movements
+        env_cfg["termination_if_pitch_greater_than"] = 25
+        env_cfg["termination_if_roll_greater_than"] = 25
+        env_cfg["termination_if_base_height_lower_than"] = 0.18
+        # Note: Use static obstacles (no --dynamic_obstacles flag) to keep obstacles perpendicular to path
 
     elif curriculum_stage == 5:
         # Stage 5: Full navigation
@@ -248,8 +293,8 @@ def get_navigation_cfgs(curriculum_stage=1):
                 
                 # Base rewards (reduced for navigation)
                 "lin_vel_z": 1.0,
-                "action_rate": 0.5,
-                "similar_to_default": 0.05,
+                "action_rate": -0.1,
+                "similar_to_default": -0.05,
             },
         }
     
@@ -284,6 +329,7 @@ def main():
     parser.add_argument("--resume", action='store_true')
     parser.add_argument("--resume_path", type=str, default=None)
     parser.add_argument("--params_pkl", type=str, default=None)
+    parser.add_argument("--dynamic_obstacles", action='store_true')
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
@@ -347,7 +393,8 @@ def main():
         reward_cfg=reward_cfg,
         command_cfg=command_cfg,
         uneven_terrain=args.uneven_terrain,
-        wind_force=args.wind_force
+        wind_force=args.wind_force,
+        dynamic_obstacles=args.dynamic_obstacles,
     )
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
