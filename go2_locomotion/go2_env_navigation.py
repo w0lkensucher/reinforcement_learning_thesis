@@ -395,24 +395,55 @@ class Go2NavigationEnv(Go2BaseEnv):
 
             else:
                 print("Dynamic obstacles enabled")
-                # Place obstacles in front of robot spawn
+                # Place two obstacles: one to avoid/jump and one target behind it
                 base_init_pos = self.env_cfg.get('base_init_pos', [0.0, 0.0, 0.42])
                 base_yaw = self.env_cfg.get('base_init_yaw', 0.0)
-                dists = [2.5, 4.5, 6.5]  # meters ahead
-                for _, dist in enumerate(dists):
-                    width = np.mean(self.env_cfg["obstacle_width_range"])
-                    height = np.mean(self.env_cfg["obstacle_height_range"])
-                    x = base_init_pos[0] + dist * np.cos(base_yaw)
-                    y = base_init_pos[1] + dist * np.sin(base_yaw)
-                    geom = gs.morphs.Box(
-                        pos=(x, y, height / 2),
-                        size=(width, width, height)
-                    )
-                    # High rho makes obstacles heavy and immovable during collisions
-                    material = gs.materials.Rigid(friction=0.8, rho=10000.0)
-                    entity = self.scene.add_entity(geom, material=material)
-                    self.obstacle_entities.append(entity)
-                    self.obstacle_positions.append([x, y, height, "box"])
+                
+                # Get configurable obstacle parameters from env_cfg
+                obstacle_height = self.env_cfg.get('dynamic_obstacle_height', 0.3)  # Default: high obstacle
+                obstacle_width = self.env_cfg.get('dynamic_obstacle_width', 0.4)
+                obstacle_distance = self.env_cfg.get('dynamic_obstacle_distance', 3.5)
+                
+                # Determine obstacle color and type based on height
+                jump_threshold = self.reward_cfg.get('jump_height_threshold', 0.08)
+                if obstacle_height < jump_threshold:
+                    # Low obstacle (jumpable) - YELLOW
+                    obstacle_color = (1.0, 1.0, 0.0, 1.0)
+                    obstacle_type = "low"
+                else:
+                    # High obstacle (must avoid) - RED
+                    obstacle_color = (1.0, 0.0, 0.0, 1.0)
+                    obstacle_type = "high"
+                
+                # Obstacle 1: To be avoided or jumped - Color depends on height
+                x1 = base_init_pos[0] + obstacle_distance * np.cos(base_yaw)
+                y1 = base_init_pos[1] + obstacle_distance * np.sin(base_yaw)
+                geom1 = gs.morphs.Box(
+                    pos=(x1, y1, obstacle_height / 2),
+                    size=(obstacle_width, obstacle_width, obstacle_height)
+                )
+                surface1 = gs.surfaces.Default(color=obstacle_color)
+                material1 = gs.materials.Rigid(friction=0.8, rho=10000.0)
+                entity1 = self.scene.add_entity(geom1, material=material1, surface=surface1)
+                self.obstacle_entities.append(entity1)
+                self.obstacle_positions.append([x1, y1, obstacle_height, obstacle_type])
+                
+                # Object 2: Target object behind the first obstacle - GREEN
+                dist2 = obstacle_distance + 5.0  # meters ahead (5m behind the blocker)
+                width2 = 0.25  # Smaller target object
+                height2 = 0.15
+                x2 = base_init_pos[0] + dist2 * np.cos(base_yaw)
+                y2 = base_init_pos[1] + dist2 * np.sin(base_yaw)
+                geom2 = gs.morphs.Cylinder(
+                    pos=(x2, y2, height2 / 2),
+                    radius=width2 / 2,
+                    height=height2
+                )
+                surface2 = gs.surfaces.Default(color=(0.0, 1.0, 0.0, 1.0))  # Green surface
+                material2 = gs.materials.Rigid(friction=0.8, rho=10000.0)
+                entity2 = self.scene.add_entity(geom2, material=material2, surface=surface2)
+                self.obstacle_entities.append(entity2)
+                self.obstacle_positions.append([x2, y2, height2, "cylinder"])
 
             print(f"Successfully created {len(self.obstacle_positions)} obstacles")
         except Exception as e:
@@ -456,16 +487,54 @@ class Go2NavigationEnv(Go2BaseEnv):
             low_obs = torch.zeros(self.num_envs, device=self.device)
             high_obs = torch.zeros(self.num_envs, device=self.device)
 
+        # Goal direction observation (only in dynamic goal-reaching mode)
+        if self.dynamic_obstacles and len(self.obstacle_positions) == 2:
+            target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+            blocker_pos = torch.tensor(self.obstacle_positions[0][:2], device=self.device, dtype=torch.float32)
+            robot_pos = self.base_pos[:, :2]
+            robot_yaw = self.base_radians[:, 2]
+            cos_yaw = torch.cos(robot_yaw)
+            sin_yaw = torch.sin(robot_yaw)
+
+            # Goal relative observations
+            to_goal = target_pos.unsqueeze(0) - robot_pos  # (N, 2)
+            goal_dist = torch.norm(to_goal, dim=1, keepdim=True).clamp(min=0.1)
+            to_goal_dir = to_goal / goal_dist
+            goal_cos = to_goal_dir[:, 0] * cos_yaw + to_goal_dir[:, 1] * sin_yaw
+            goal_sin = -to_goal_dir[:, 0] * sin_yaw + to_goal_dir[:, 1] * cos_yaw
+            goal_dist_norm = (goal_dist.squeeze(1) / 15.0).clamp(0.0, 1.0)
+
+            # Blocker relative observations (same encoding as goal)
+            to_blocker = blocker_pos.unsqueeze(0) - robot_pos  # (N, 2)
+            blocker_dist = torch.norm(to_blocker, dim=1, keepdim=True).clamp(min=0.1)
+            to_blocker_dir = to_blocker / blocker_dist
+            blocker_cos = to_blocker_dir[:, 0] * cos_yaw + to_blocker_dir[:, 1] * sin_yaw  # 1=facing blocker
+            blocker_sin = -to_blocker_dir[:, 0] * sin_yaw + to_blocker_dir[:, 1] * cos_yaw  # +ve=blocker left, -ve=right
+            blocker_dist_norm = (blocker_dist.squeeze(1) / 8.0).clamp(0.0, 1.0)  # normalize by max ~8m
+        else:
+            goal_cos = torch.zeros(self.num_envs, device=self.device)
+            goal_sin = torch.zeros(self.num_envs, device=self.device)
+            goal_dist_norm = torch.zeros(self.num_envs, device=self.device)
+            blocker_cos = torch.zeros(self.num_envs, device=self.device)
+            blocker_sin = torch.zeros(self.num_envs, device=self.device)
+            blocker_dist_norm = torch.zeros(self.num_envs, device=self.device)
+
         self.obs_buf = torch.cat([
-        self.base_ang_vel * self.obs_scales["ang_vel"],  # 3
-        self.projected_gravity,  # 3
-        self.commands * self.commands_scale,  # 3
-        (self.dof_pos - self.default_dof_pos) * self.obs_scales["dof_pos"],  # 12
-        self.dof_vel * self.obs_scales["dof_vel"],  # 12
-        self.actions,  # 12
-        low_obs.unsqueeze(1),   # 1: signal for low obstacle
-        high_obs.unsqueeze(1),  # 1: signal for high obstacle
-    ], axis=-1)
+            self.base_ang_vel * self.obs_scales["ang_vel"],  # 3
+            self.projected_gravity,  # 3
+            self.commands * self.commands_scale,  # 3
+            (self.dof_pos - self.default_dof_pos) * self.obs_scales["dof_pos"],  # 12
+            self.dof_vel * self.obs_scales["dof_vel"],  # 12
+            self.actions,  # 12
+            low_obs.unsqueeze(1),          # 1: signal for low obstacle
+            high_obs.unsqueeze(1),         # 1: signal for high obstacle
+            goal_cos.unsqueeze(1),         # 1: cos of heading error to goal
+            goal_sin.unsqueeze(1),         # 1: sin of heading error to goal
+            goal_dist_norm.unsqueeze(1),   # 1: normalized distance to goal
+            blocker_cos.unsqueeze(1),      # 1: cos of heading error to blocker
+            blocker_sin.unsqueeze(1),      # 1: sin of heading error to blocker (+ve=left, -ve=right)
+            blocker_dist_norm.unsqueeze(1),# 1: normalized distance to blocker
+        ], axis=-1)
         
 
     def get_observations(self):
@@ -557,15 +626,41 @@ class Go2NavigationEnv(Go2BaseEnv):
     def _reward_forward_movement(self):
         """Heavily reward forward movement, penalize standing still"""
         forward_vel = self.base_lin_vel[:, 0]
-        
+
         # Heavy penalty for standing still
         standing_penalty = torch.where(forward_vel < 0.1, -1.0, 0.0)
-        
+
         # Reward forward movement
         forward_reward = torch.clamp(forward_vel, 0, 2.0)  # Cap at 2 m/s
-        
+
         return forward_reward + standing_penalty
-    
+
+
+    def _reward_keep_moving(self):
+        """Penalize being stationary using total XY speed - for navigation stages where
+        lateral avoidance maneuvers are needed and forward-only check would be unfair."""
+        xy_speed = torch.norm(self.base_lin_vel[:, :2], dim=1)
+        standing_penalty = torch.where(xy_speed < 0.1, -1.0, 0.0)
+        movement_reward = torch.clamp(xy_speed, 0, 2.0)
+        return movement_reward + standing_penalty
+
+
+    def _reward_blocker_clearance(self):
+        """Reward for navigating past the blocker obstacle in X.
+        Fills the reward-dead zone during the lateral avoidance maneuver:
+        fires continuously once the robot's X exceeds the blocker's X,
+        giving a gradient to push through the avoidance rather than retreat."""
+        if not self.dynamic_obstacles or len(self.obstacle_positions) != 2:
+            return torch.zeros(self.num_envs, device=self.device)
+
+        # Blocker is obstacle 0, always placed along +X (base_init_yaw=0)
+        blocker_x = self.obstacle_positions[0][0]  # X coordinate of blocker
+        robot_x = self.base_pos[:, 0]              # Robot X position
+
+        # Reward proportional to how far past the blocker the robot is, capped at 2m
+        clearance = torch.clamp(robot_x - blocker_x, min=0.0, max=2.0)
+        return clearance
+
 
     def _reward_straight_walk_when_clear(self):
         """Reward walking straight when no obstacles are nearby"""
@@ -720,14 +815,20 @@ class Go2NavigationEnv(Go2BaseEnv):
 
 
     def _reward_obstacle_avoidance(self):
-        """Reward for proper obstacle handling"""
+        """Reward for proper obstacle handling (excludes target obstacle in goal-reaching mode)"""
         if len(self.obstacle_positions) == 0:
             return torch.zeros(self.num_envs, device=self.device)
         
         robot_pos = self.base_pos[:, :2]
         collision_penalty = torch.zeros(self.num_envs, device=self.device)
         
-        for obs_data in self.obstacle_positions:
+        # Skip the last obstacle only in dynamic goal-reaching mode (2 obstacles: blocker + target)
+        if self.dynamic_obstacles and len(self.obstacle_positions) == 2:
+            obstacles_to_check = self.obstacle_positions[:-1]  # Only check the blocker
+        else:
+            obstacles_to_check = self.obstacle_positions  # Check all obstacles
+        
+        for obs_data in obstacles_to_check:
             obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
             obs_type = obs_data[3]
             
@@ -754,16 +855,110 @@ class Go2NavigationEnv(Go2BaseEnv):
         return collision_penalty
     
 
+    def _reward_target_proximity(self):
+        """Reward being close to the target object (second obstacle) - only in goal-reaching mode"""
+        # Only active in dynamic obstacle mode with exactly 2 obstacles (blocker + target)
+        if not self.dynamic_obstacles or len(self.obstacle_positions) != 2:
+            return torch.zeros(self.num_envs, device=self.device)
+        
+        # Target is the second obstacle (cylinder behind the first)
+        target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+        robot_pos = self.base_pos[:, :2]
+        distance = torch.norm(robot_pos - target_pos, dim=1)
+        
+        # Two-component reward: exponential for close range + linear for long range
+        # Linear component provides gradient from far away: 1.0 at 0m, 0.0 at 10m
+        linear_reward = torch.clamp(1.0 - distance / 10.0, 0.0, 1.0)
+        # Sharper exponential - stronger pull in final 1-2m approach
+        exp_reward = torch.exp(-distance / 1.0)
+        
+        # Combine: 0.3 weight to linear (long-range) + 0.7 weight to exponential (short-range)
+        return 0.3 * linear_reward + 0.7 * exp_reward
+
+
+    def _reward_target_reached(self):
+        """Bonus reward for reaching the target object - only in goal-reaching mode"""
+        # Only active in dynamic obstacle mode with exactly 2 obstacles (blocker + target)
+        if not self.dynamic_obstacles or len(self.obstacle_positions) != 2:
+            return torch.zeros(self.num_envs, device=self.device)
+        
+        target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+        robot_pos = self.base_pos[:, :2]
+        distance = torch.norm(robot_pos - target_pos, dim=1)
+        
+        # Graduated success reward: partial credit for getting close
+        # 1.0 within 0.5m, 0.5 within 1.0m, 0.2 within 1.5m
+        reward = torch.zeros_like(distance)
+        reward = torch.where(distance < 1.5, 0.2, reward)
+        reward = torch.where(distance < 1.0, 0.5, reward)
+        reward = torch.where(distance < 0.5, 1.0, reward)
+        return reward
+
+
+    def _reward_target_progress(self):
+        """Reward for moving toward the target (reduces distance) - prevents standing still"""
+        # Only active in dynamic obstacle mode with exactly 2 obstacles (blocker + target)
+        if not self.dynamic_obstacles or len(self.obstacle_positions) != 2:
+            return torch.zeros(self.num_envs, device=self.device)
+        
+        target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+        robot_pos = self.base_pos[:, :2]
+        current_distance = torch.norm(robot_pos - target_pos, dim=1)
+        
+        # Initialize tracking on first call
+        if not hasattr(self, 'last_target_distance'):
+            self.last_target_distance = current_distance.clone()
+            return torch.zeros(self.num_envs, device=self.device)  # No reward on first step
+        
+        # Compute progress only along the direction TO the target (not raw Euclidean)
+        # This prevents reward hacking by moving sideways to reduce diagonal distance
+        to_target = target_pos.unsqueeze(0) - robot_pos  # (num_envs, 2)
+        to_target_dist = torch.norm(to_target, dim=1, keepdim=True).clamp(min=1e-6)
+        to_target_dir = to_target / to_target_dist  # unit vector toward target
+
+        # Project robot velocity onto target direction - reward only genuine approach
+        robot_vel_xy = self.base_lin_vel[:, :2]  # (num_envs, 2)
+        approach_vel = torch.sum(robot_vel_xy * to_target_dir, dim=1)  # scalar per env
+
+        # Update distance tracking
+        self.last_target_distance = current_distance.clone()
+        
+        # Reward = velocity component toward target (positive = approaching)
+        return torch.clamp(approach_vel, min=-2.0, max=2.0)
+
+
     def _check_termination(self):
-        """Override base termination to include collision detection"""
+        """Override base termination to include collision detection and goal reaching"""
         # Call base class termination checks (pitch, roll, height, time)
         super()._check_termination()
         
+        # Success termination: reaching the goal (only in dynamic goal-reaching mode)
+        if self.dynamic_obstacles and len(self.obstacle_positions) == 2:
+            target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+            robot_pos = self.base_pos[:, :2]
+            distance_to_goal = torch.norm(robot_pos - target_pos, dim=1)
+            
+            # Terminate only when very close (smaller than reward radius)
+            # This allows robot to accumulate rewards while near goal
+            termination_radius = 0.35  # Much smaller than reward radius (0.8m)
+            goal_reached = distance_to_goal < termination_radius
+            self.reset_buf |= goal_reached
+
+            # Terminate if robot walks significantly past the goal (not trivial overshoot)
+            # Robot spawns facing +X (base_init_yaw=0), so goal is always along +X axis.
+            # Simple X-coordinate comparison - cheapest possible check.
+            overshoot_threshold = 3.0  # Must be 3m past the goal in X to terminate
+            overshot = robot_pos[:, 0] > (target_pos[0] + overshoot_threshold)
+            self.reset_buf |= overshot
+
         # Add collision termination for navigation (if enabled)
         if self.env_cfg.get('terminate_on_collision', False) and len(self.obstacle_positions) > 0:
             robot_pos = self.base_pos[:, :2]
             
-            for obs_data in self.obstacle_positions:
+            # In goal-reaching mode, only check collision with the first obstacle (blocker)
+            obstacles_to_check = self.obstacle_positions[:-1] if (self.dynamic_obstacles and len(self.obstacle_positions) == 2) else self.obstacle_positions
+            
+            for obs_data in obstacles_to_check:
                 obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
                 
                 # Distance to obstacle
@@ -777,6 +972,21 @@ class Go2NavigationEnv(Go2BaseEnv):
                 # Set reset buffer for collided environments
                 self.reset_buf |= collision_mask
     
+
+    def reset_idx(self, envs_idx):
+        """Override to reset navigation-specific tracking"""
+        # Call base class reset
+        super().reset_idx(envs_idx)
+        
+        # Reset progress tracking for goal-reaching
+        if hasattr(self, 'last_target_distance'):
+            if self.dynamic_obstacles and len(self.obstacle_positions) == 2:
+                target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+                robot_pos = self.base_pos[:, :2]
+                self.last_target_distance[envs_idx] = torch.norm(robot_pos[envs_idx] - target_pos, dim=1)
+            else:
+                self.last_target_distance[envs_idx] = 0.0
+
 
     def _reposition_dynamic_obstacles(self):
         """Reposition dynamic obstacles in front of robot when passed during training"""

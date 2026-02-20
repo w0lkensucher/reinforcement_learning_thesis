@@ -176,12 +176,12 @@ class Go2BaseEnv:
         roll_violations = torch.abs(self.base_radians[:, 0]) > roll_thresh_rad
         height_violations = self.base_pos[:, 2] < self.env_cfg.get("termination_if_base_height_lower_than", 0.30)
         
-        # if pitch_violations.any():
-        #     print(f"PITCH termination: {self.base_radians[pitch_violations, 1] * 180/3.14159}")
-        # if roll_violations.any():
-        #     print(f"ROLL termination: {self.base_radians[roll_violations, 0] * 180/3.14159}")
-        # if height_violations.any():
-        #     print(f"HEIGHT termination: {self.base_pos[height_violations, 2]}")
+        if pitch_violations.any():
+            print(f"PITCH termination: {self.base_radians[pitch_violations, 1] * 180/3.14159}")
+        if roll_violations.any():
+            print(f"ROLL termination: {self.base_radians[roll_violations, 0] * 180/3.14159}")
+        if height_violations.any():
+            print(f"HEIGHT termination: {self.base_pos[height_violations, 2]}")
         
         self.reset_buf |= pitch_violations
         self.reset_buf |= roll_violations

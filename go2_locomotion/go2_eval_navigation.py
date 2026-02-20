@@ -153,27 +153,24 @@ def main():
             for step in range(max_sim_step):
                 actions = policy(obs)
                 obs, rews, dones, infos = env.step(actions)
-                
-                # Update camera to follow robot
-                robot_pos = env.base_pos[0].cpu().numpy()  # Get position of first environment
-                cam_offset = [3.0, 0.0, 2.0]  # Camera offset: behind, side, above
-                env.cam.set_pose(
-                    pos=(robot_pos[0] + cam_offset[0], robot_pos[1] + cam_offset[1], robot_pos[2] + cam_offset[2]),
-                    lookat=(robot_pos[0], robot_pos[1], robot_pos[2] + 0.3)  # Look at robot's body
-                )
 
-                # --- Camera follow logic ---
-                base_pos = env.base_pos[0].cpu().numpy()  # shape (3,)
-                base_yaw = env.base_radians[0, 2].cpu().item()  # radians
-                cam_height = 7.0   # meters above
-                cam_distance = 3.0 # meters behind
-                cam_side = 1.0     # meters to the right
-                cam_x = base_pos[0] - cam_distance * np.cos(base_yaw) + cam_side * np.sin(base_yaw)
-                cam_y = base_pos[1] - cam_distance * np.sin(base_yaw) - cam_side * np.cos(base_yaw)
-                cam_z = base_pos[2] + cam_height
-                cam_pos = (cam_x, cam_y, cam_z)
-                lookat = (base_pos[0], base_pos[1], base_pos[2])
-                env.cam.set_pose(pos=cam_pos, lookat=lookat)
+                # Over-the-shoulder camera: behind and above the robot, looking forward
+                base_pos = env.base_pos[0].cpu().numpy()
+                base_yaw = env.base_radians[0, 2].cpu().item()
+
+                cam_behind  = 2.5   # meters behind robot
+                cam_above   = 1.5   # meters above robot
+                look_ahead  = 2.0   # lookat point ahead of robot
+
+                cam_x = base_pos[0] - cam_behind * np.cos(base_yaw)
+                cam_y = base_pos[1] - cam_behind * np.sin(base_yaw)
+                cam_z = base_pos[2] + cam_above
+
+                look_x = base_pos[0] + look_ahead * np.cos(base_yaw)
+                look_y = base_pos[1] + look_ahead * np.sin(base_yaw)
+                look_z = base_pos[2] + 0.3  # slightly above ground level
+
+                env.cam.set_pose(pos=(cam_x, cam_y, cam_z), lookat=(look_x, look_y, look_z))
                 env.cam.render()
 
                 reset_idx = dones.nonzero(as_tuple=False).squeeze(-1)
