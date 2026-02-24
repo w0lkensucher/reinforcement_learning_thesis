@@ -855,6 +855,27 @@ class Go2NavigationEnv(Go2BaseEnv):
         return collision_penalty
     
 
+    def _reward_goal_heading(self):
+        """Reward for facing toward the goal - fires at all times, encourages re-orientation after passing the blocker"""
+        if not self.dynamic_obstacles or len(self.obstacle_positions) != 2:
+            return torch.zeros(self.num_envs, device=self.device)
+
+        target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+        robot_pos = self.base_pos[:, :2]
+        robot_yaw = self.base_radians[:, 2]
+
+        to_goal = target_pos.unsqueeze(0) - robot_pos  # (N, 2)
+        goal_dist = torch.norm(to_goal, dim=1, keepdim=True).clamp(min=0.1)
+        to_goal_dir = to_goal / goal_dist
+
+        # cos of angle between robot heading and goal direction: 1=facing goal, -1=facing away
+        cos_yaw = torch.cos(robot_yaw)
+        sin_yaw = torch.sin(robot_yaw)
+        goal_cos = to_goal_dir[:, 0] * cos_yaw + to_goal_dir[:, 1] * sin_yaw
+
+        return goal_cos  # range [-1, 1]
+
+
     def _reward_target_proximity(self):
         """Reward being close to the target object (second obstacle) - only in goal-reaching mode"""
         # Only active in dynamic obstacle mode with exactly 2 obstacles (blocker + target)
@@ -940,7 +961,7 @@ class Go2NavigationEnv(Go2BaseEnv):
             
             # Terminate only when very close (smaller than reward radius)
             # This allows robot to accumulate rewards while near goal
-            termination_radius = 0.35  # Much smaller than reward radius (0.8m)
+            termination_radius = 0.4  # Much smaller than reward radius (0.8m)
             goal_reached = distance_to_goal < termination_radius
             self.reset_buf |= goal_reached
 

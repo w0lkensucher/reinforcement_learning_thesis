@@ -124,7 +124,7 @@ def get_navigation_cfgs(curriculum_stage=1):
     }
     
     obs_cfg = {
-        "num_obs": 53,  # Base (45) + obstacle signals (2) + goal dir cos/sin/dist (3) + blocker dir cos/sin/dist (3)
+        "num_obs": 53,  # Base (45) + obstacle signals (2)
         "obs_scales": {
             "lin_vel": 2.0,
             "ang_vel": 0.25,
@@ -192,27 +192,28 @@ def get_navigation_cfgs(curriculum_stage=1):
 
     elif curriculum_stage == 2:
         # Stage 2: Walking
-        command_cfg["lin_vel_x_range"] = [0.3, 0.7]    # Full walking range
-        command_cfg["lin_vel_y_range"] = [-0.3, 0.3]   # Allow lateral movement
-        command_cfg["ang_vel_range"] = [-0.5, 0.5]     # Allow turning
-    
+        command_cfg["lin_vel_x_range"] = [0.3, 0.7]    # Straight forward walking
+        command_cfg["lin_vel_y_range"] = [0.0, 0.0]    # No lateral - prevents rightward drift
+        command_cfg["ang_vel_range"] = [0.0, 0.0]      # No turning - prevents heading drift
+
         reward_cfg["tracking_sigma"] = 0.25             # Tight tracking - standing still with 0.3 cmd gets heavily penalized
 
         # WALKING is PRIMARY - flip the balance vs standing config
-        reward_cfg["reward_scales"]["tracking_lin_vel"] = 4.0      # Dominant reward - must move
-        reward_cfg["reward_scales"]["tracking_ang_vel"] = 1.0      # Follow turning commands
+        reward_cfg["reward_scales"]["tracking_lin_vel"] = 4.0      # Dominant reward - must move forward
+        reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.0      # Disabled - no turning commands
 
         # Stability is SECONDARY - just enough to prevent falling
-        reward_cfg["reward_scales"]["upright"] = 1.0               # Reduced - was causing standing reward hacking
-        reward_cfg["reward_scales"]["height"] = 0.5                # Reduced - was causing standing reward hacking
+        reward_cfg["reward_scales"]["upright"] = 2.5               # Keep robot upright
+        reward_cfg["reward_scales"]["height"] = 1.5                # Maintain proper height
 
         # Explicit penalty for standing still - robot cannot reward-hack by not moving
         reward_cfg["reward_scales"]["forward_movement"] = 1.5      # Penalize zero forward velocity
 
-        # Movement quality
-        reward_cfg["reward_scales"]["action_rate"] = -0.05         # Smooth transitions (reduced - don't over-penalize gait)
-        reward_cfg["reward_scales"]["similar_to_default"] = -0.05  # Light pose penalty
-        reward_cfg["reward_scales"]["lin_vel_z"] = -0.1            # Minimize bouncing
+        # Movement quality - stronger to enforce stable, symmetric gait
+        reward_cfg["reward_scales"]["action_rate"] = -0.15         # Stronger smoothness - reduces jerky/unstable motion
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.1   # Stronger pose penalty - keeps natural posture
+        reward_cfg["reward_scales"]["symmetry"] = -0.15            # Penalize asymmetric leg movement - reduces drift and wobble
+        reward_cfg["reward_scales"]["lin_vel_z"] = -0.2            # Stronger bounce penalty
 
         env_cfg["episode_length_s"] = 20.0
         env_cfg["use_obstacles"] = False
@@ -220,7 +221,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         # Relaxed termination for learning to walk
         env_cfg["termination_if_pitch_greater_than"] = 40
         env_cfg["termination_if_roll_greater_than"] = 40
-        env_cfg["termination_if_base_height_lower_than"] = 0.15  # Near-disabled: pitch/roll catch falls; height was terminating normal stride dips
+        env_cfg["termination_if_base_height_lower_than"] = 0.28  # Near-disabled: pitch/roll catch falls; height was terminating normal stride dips
 
     elif curriculum_stage == 3:
         # Stage 3: Goal-reaching with HIGH obstacle avoidance (use --dynamic_obstacles)
@@ -239,7 +240,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["reward_scales"]["target_proximity"] = 8.0      # Increased: linear gradient (1-dist/10) must overpower keep_moving at long range
         reward_cfg["reward_scales"]["target_reached"] = 20.0       # Strong success bonus
         reward_cfg["reward_scales"]["target_progress"] = 10.0       # Dominant - must MOVE toward goal, not just be near it
-        reward_cfg["reward_scales"]["obstacle_avoidance"] = 0.0    # DISABLED - blocker is a rigid body, robot can't pass through it anyway; penalty was teaching robot to retreat
+        reward_cfg["reward_scales"]["obstacle_avoidance"] = 2.0    # BALANCED - provides safety feedback without encouraging excessive retreat; lower than progress rewards to maintain forward drive
         
         # Movement quality
         reward_cfg["reward_scales"]["action_rate"] = -0.05         # Smooth movement
@@ -250,16 +251,17 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["reward_scales"]["forward_movement"] = 0.0      # DISABLED - X-velocity check penalizes lateral avoidance maneuvers
         reward_cfg["reward_scales"]["keep_moving"] = 0.1           # Minimal: only breaks wall-lean local optimum; reduced so it doesn't outcompete proximity gradient
         reward_cfg["reward_scales"]["blocker_clearance"] = 3.0     # Rewards navigating past blocker X; fills reward-dead zone during lateral avoidance maneuver
+        reward_cfg["reward_scales"]["goal_heading"] = 3.0          # Re-orient toward goal after passing blocker; fires at all ranges
         reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.0
         reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.0
 
         env_cfg["episode_length_s"] = 45.0
         env_cfg["use_obstacles"] = True
-        env_cfg["terminate_on_collision"] = False
+        env_cfg["terminate_on_collision"] = True  # STRICT: High obstacles must be avoided - episode failure teaches clear boundaries
         
         # Relaxed termination for learning navigation
-        env_cfg["termination_if_pitch_greater_than"] = 20  # Allow more tilt while learning
-        env_cfg["termination_if_roll_greater_than"] = 20
+        env_cfg["termination_if_pitch_greater_than"] = 30  # Allow more tilt while learning
+        env_cfg["termination_if_roll_greater_than"] = 30
         env_cfg["termination_if_base_height_lower_than"] = 0.25  # Allow slight crouch
         
         # Dynamic obstacle configuration (HIGH obstacle - must avoid)
