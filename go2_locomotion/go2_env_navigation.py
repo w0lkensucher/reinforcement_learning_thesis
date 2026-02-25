@@ -910,9 +910,9 @@ class Go2NavigationEnv(Go2BaseEnv):
         # Graduated success reward: partial credit for getting close
         # 1.0 within 0.5m, 0.5 within 1.0m, 0.2 within 1.5m
         reward = torch.zeros_like(distance)
-        reward = torch.where(distance < 1.5, 0.2, reward)
-        reward = torch.where(distance < 1.0, 0.5, reward)
-        reward = torch.where(distance < 0.5, 1.0, reward)
+        reward = torch.where(distance < 2.0, 0.2, reward)
+        reward = torch.where(distance < 1.5, 0.5, reward)
+        reward = torch.where(distance < 1.0, 1.0, reward)
         return reward
 
 
@@ -952,46 +952,32 @@ class Go2NavigationEnv(Go2BaseEnv):
         """Override base termination to include collision detection and goal reaching"""
         # Call base class termination checks (pitch, roll, height, time)
         super()._check_termination()
-        
-        # Success termination: reaching the goal (only in dynamic goal-reaching mode)
-        if self.dynamic_obstacles and len(self.obstacle_positions) == 2:
+
+        # obs_buf indices: ... goal_dist_norm (idx -4), blocker_dist_norm (idx -1)
+        goal_dist_norm = self.obs_buf[:, -4]
+        blocker_dist_norm = self.obs_buf[:, -1]
+
+        # Terminate if robot walks significantly past the goal (still use X comparison for overshoot)
+        if self.dynamic_obstacles and len(self.obstacle_positions) == 2:        # Terminate when normalized goal distance is below threshold
+            # goal_dist_norm = distance_to_goal / 15.0 (see obs_buf construction)
+            # Use normalized distances from obs_buf for termination
+            termination_radius = 0.8  # meters
+            goal_norm_thresh = termination_radius / 15.0
+            goal_reached = goal_dist_norm < goal_norm_thresh
+            self.reset_buf |= goal_reached
             target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
             robot_pos = self.base_pos[:, :2]
-            distance_to_goal = torch.norm(robot_pos - target_pos, dim=1)
-            
-            # Terminate only when very close (smaller than reward radius)
-            # This allows robot to accumulate rewards while near goal
-            termination_radius = 0.4  # Much smaller than reward radius (0.8m)
-            goal_reached = distance_to_goal < termination_radius
-            self.reset_buf |= goal_reached
-
-            # Terminate if robot walks significantly past the goal (not trivial overshoot)
-            # Robot spawns facing +X (base_init_yaw=0), so goal is always along +X axis.
-            # Simple X-coordinate comparison - cheapest possible check.
-            overshoot_threshold = 3.0  # Must be 3m past the goal in X to terminate
+            overshoot_threshold = 3.0
             overshot = robot_pos[:, 0] > (target_pos[0] + overshoot_threshold)
             self.reset_buf |= overshot
 
         # Add collision termination for navigation (if enabled)
-        if self.env_cfg.get('terminate_on_collision', False) and len(self.obstacle_positions) > 0:
-            robot_pos = self.base_pos[:, :2]
-            
-            # In goal-reaching mode, only check collision with the first obstacle (blocker)
-            obstacles_to_check = self.obstacle_positions[:-1] if (self.dynamic_obstacles and len(self.obstacle_positions) == 2) else self.obstacle_positions
-            
-            for obs_data in obstacles_to_check:
-                obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
-                
-                # Distance to obstacle
-                to_obstacle = obs_pos.unsqueeze(0) - robot_pos
-                distance = torch.norm(to_obstacle, dim=1)
-                
-                # Collision threshold - terminate if robot touches obstacle
-                collision_threshold = self.env_cfg.get('collision_threshold', 0.25)
-                collision_mask = distance < collision_threshold
-                
-                # Set reset buffer for collided environments
-                self.reset_buf |= collision_mask
+        if self.env_cfg.get('terminate_on_collision', False):
+            # blocker_dist_norm = distance_to_blocker / 8.0 (see obs_buf construction)
+            collision_threshold = self.env_cfg.get('collision_threshold', 0.25)
+            blocker_norm_thresh = collision_threshold / 8.0
+            collision_mask = blocker_dist_norm < blocker_norm_thresh
+            self.reset_buf |= collision_mask
     
 
     def reset_idx(self, envs_idx):

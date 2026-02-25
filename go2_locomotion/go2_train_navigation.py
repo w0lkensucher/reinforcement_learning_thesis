@@ -240,7 +240,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["reward_scales"]["target_proximity"] = 8.0      # Increased: linear gradient (1-dist/10) must overpower keep_moving at long range
         reward_cfg["reward_scales"]["target_reached"] = 20.0       # Strong success bonus
         reward_cfg["reward_scales"]["target_progress"] = 10.0       # Dominant - must MOVE toward goal, not just be near it
-        reward_cfg["reward_scales"]["obstacle_avoidance"] = 2.0    # BALANCED - provides safety feedback without encouraging excessive retreat; lower than progress rewards to maintain forward drive
+        reward_cfg["reward_scales"]["obstacle_avoidance"] = 4.0    # BALANCED - provides safety feedback without encouraging excessive retreat; lower than progress rewards to maintain forward drive
         
         # Movement quality
         reward_cfg["reward_scales"]["action_rate"] = -0.05         # Smooth movement
