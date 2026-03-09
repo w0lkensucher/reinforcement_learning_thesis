@@ -1,17 +1,111 @@
 \chapter{Theoretische Grundlagen}\label{ch:theoretical_basics}
+% TODO: Arbeit von francois-lavet und mnih, sutton barto, ppo, 
+Die Entwicklung robuster Bewegungsstrategien für vierbeinige Roboter erfordert ein Zusammenspiel aus mechanischen Grundlagen der Lokomotion und modernen Lernverfahren \cite{hwangboLearningAgileDynamic2019, hutterANYmalHighlyMobile2016}. Quadrupede Lokomotion beschreibt die koordinierte Bewegung eines Roboters mit vier Beinen, bei der Stabilität, Gangmuster und die Interaktion mit dem Untergrund eine zentrale Rolle spielen \cite{hwangboLearningAgileDynamic2019, hutterANYmalHighlyMobile2016}. Reinforcement Learning ermöglicht dafür das autonome Erlernen von Policies durch Interaktion mit einer Umgebung, wobei Belohnungssignale als Feedback dienen \cite{silverRewardEnough2021, zhangORSOAcceleratingReward2025, Kober_IJRR_2013}. Deep Reinforcement Learning erweitert diesen Ansatz durch den Einsatz tiefer neuronaler Netze zur Approximation von Policies oder Wertfunktionen und erlaubt damit die Verarbeitung hochdimensionaler Zustandsräume sowie komplexer Sensordaten \cite{rudin2022learningwalkminutesusing, tangDeepReinforcementLearning2024, cobbe2019quantifyinggeneralizationreinforcementlearning}. Im Folgenden werden daher zunächst die grundlegenden Konzepte der quadrupeden Lokomotion sowie die zentralen Prinzipien des Reinforcement Learning und Deep Reinforcement Learning erläutert, welche die Grundlage für die in dieser Arbeit verwendeten Methoden bilden.
+\section{Deep Learning}
+Deep Learning ist ein Teilbereich des maschinellen Lernens, der auf der Verwendung künstlicher neuronaler Netze mit mehreren Verarbeitungsschichten basiert \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Die zentrale Eigenschaft tiefer Architekturen ist ihre Fähigkeit, automatisch hierarchische Repräsentationen aus Rohdaten zu lernen \cite{francois-lavetIntroductionDeepReinforcement2018}, anstatt auf manuell gestaltete Merkmale angewiesen zu sein \cite{Goodfellow-et-al-2016}. Dabei identifizieren die ersten Schichten einfache Strukturen wie z.B. Kanten in Bildern, während tiefere Schichten diese Information in Kontext setzen \cite{Goodfellow-et-al-2016}.
+\subsection{Mathematische  Grundlagen und Architektur}
+Goodfellow et al. \cite{Goodfellow-et-al-2016} nennen das Deep Feedforward Network als grundlegendstes Modell des Deep Learning, welches auch als Multilayer Perceptron oder MLP bekannt ist. Ein solches Netzwerk definiert eine mathematische Abbildung 
+\begin{equation}
+	y = f(x; \theta)
+\end{equation}
+wobei die Parameter ($\theta \text{ Gewichte } W \text{ und Biases } b$) so angepasst werden, dass sie die gewünschte Funktion bestmöglich approximieren \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Jede Schicht im Netzwerk führt eine affine Transformation, also eine Matrixmultiplikation und einer anschließende Translation, aus:
+\begin{equation}
+	h = g(W\cdot x + b)
+\end{equation}
+wobei $g$ eine nichtlineare Aktivierungsfunktion darstellt \cite{Goodfellow-et-al-2016}.
 
-% TODO: Arbeit von francois-lavet und mnih
+In modernen Architekturen hat sich die Rectified Linear Unit oder ReLU, definiert als 
+\begin{equation}
+	f(z) = max(0, z)
+\end{equation}
+als Standard für Aktivierungsfunktionen etabliert, da sie die Optimierung mittels Gradientenabstieg beschleunigt und biologisch inspirierte Eingenschaften besitzt \cite{Goodfellow-et-al-2016}. 
+\subsubsection{Optimierung durch Backpropagation}
+Das Training tiefer Netze erfolgt durch die Minimierung einer Kostenfunktion, welche die Abweichung zwischen den Vorhersagen des Netzes und den Zielwerten misst \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Der entscheidende Algorithmus hierfür ist die Backpropagation, bei dem die Kettenregel der Differentialrechnung genutzt wird, um, wie in \cite{Goodfellow-et-al-2016} und \cite{francois-lavetIntroductionDeepReinforcement2018} beschrieben, den Gradienten der Kostenfunktion in Bezug auf jedes Gewicht im Netzwerk effizient von der Ausgabeschicht zurück zu den Eingabeschichten zu berechnen.
+Die Parameter werden anschließend durch Optimierungsverfahren aktualisiert. Goodfellow et al. \cite{Goodfellow-et-al-2016} und François-Lavet et al. \cite{francois-lavetIntroductionDeepReinforcement2018} nennen dabei unter anderem stochastische Gradientenabstieg oder Varianten dessen wie Adam oder RMSprop als verbreitete Optimierungsverfahren.
 
-In this chapter, we're actually using some code!
+\section{Deep Reinforcement Learning}
+\subsection{Grundlagen von Reinforcement Learning}
 
-\begin{lstlisting}[language=Python,caption={This is an example of inline listing},captionpos=b]
-x = 1
-if x == 1:
-    # indented four spaces
-    print("x is 1.")
+\subsection{Grundlagen des Deep Reinforcement Learning}
+Während klassische Reinforcement-Learning-Verfahren bei hochdimensionalen Zustands- und Aktionsräumen oft an ihre Grenzen stoßen, was Goodman et al. \cite{Goodfellow-et-al-2016} ''Fluch der Dimensionalität'' nennen, zeigen Arulkumaran et al. in \cite{arulkumaranDRL2017}, dass Deep Learning eine effektive Lösung für dieses Problem bietet. Die Kombination der Entscheidungsfähigkeit von Reinforcement Learning mit der Wahrnehmungskapazität tiefer neuronaler Netze definiert das Forschungsfeld des Deep Reinforcement Learning oder DRL \cite{francois-lavetIntroductionDeepReinforcement2018, arulkumaranDRL2017, yuRewardModelsDeep2025}. \newline
+François-Lavet et al. \cite{francois-lavetIntroductionDeepReinforcement2018} und Arulkumaran et al. \cite{arulkumaranDRL2017} beschreiben, dass tiefe Netze in diesem Rahmen als Funktionsapproximatoren eingesetzt werden können. Dabei werden die optimale Policy oder Wertfunktion direkt aus komplexen Rohdaten, wie beispielsweise Kamerabildern oder Sensordatenströmen, approximiert \cite{levineEndtoEndTrainingDeep2016, mnihHumanlevelControlDeep2015}. \newline
 
-\end{lstlisting}
+\subsection{Proximal Policy Optimization (PPO)} % TODO fortführen, NotebookLM hat Notiz
+Schulman et al. stellen in \cite{schulmanProximalPolicyOptimization2017} Proximal Policy Optimization oder PPO vor, welche eine Sammlung von Policy-Gradient-Methoden in Deep Reinforcement Learning ist und darauf abzielt, die Stabilität und Effizienz des Lernprozesses zu maximieren.
 
-You can also include listings from a file directly:
 
-\lstinputlisting[language=Python,caption={This is an example of included listing},captionpos=b]{listings/example.py}
+\section{Grundlagen der quadrupeden Lokomotion}
+
+\subsection{Morphologie und Kinematik}
+Die Morphologie und Kinematik vierbeiniger Roboter orientieren sich häufig an biologischen Vorbildern werden jedoch in der Robotik als technische Struktur aus Gelenken, Aktuatoren und mechanischen Gliedern umgesetzt \cite{BISWAL20212017, hutterANYmalHighlyMobile2016}. Während die Morphologie den strukturellen Aufbau sowie die verfügbaren Freiheitsgrade des Roboters beschreibt \cite{BISWAL20212017, heessEmergenceLocomotionBehaviours2017, hutterANYmalHighlyMobile2016}, befasst sich die Kinematik mit der mathematischen Beschreibung der daraus resultierenden Bewegungen \cite{hwangboLearningAgileDynamic2019, bussolaGuidedReinforcementLearning2025, rechtTourReinforcementLearning2018}. Dazu zählen insbesondere Koordinatentransformationen sowie die Beziehung zwischen Gelenkzuständen und der Position der Beine im Raum \cite{hwangboLearningAgileDynamic2019, bussolaGuidedReinforcementLearning2025}.
+
+\subsubsection{Morphologie und struktureller Aufbau}
+Ein Standard-Quadruped verfügt in der Regel über 12 aktive Gelenke, was drei Freiheitsgraden pro Bein entspricht \cite{hwangboLearningAgileDynamic2019, BISWAL20212017}. Der Gelenkzustand jedes Beins wird üblicherweise durch einen Vektor der Gelenkwinkel beschrieben:
+\begin{equation}
+	q_j = [q_{HAA}, q_{HFE}, q_{KFE}]^T \in \mathbb{R}^3
+\end{equation}
+Hierbei steht $q_{HAA}$ für die Hüftabduktion/-adduktion, $q_{HFE}$ für die Hüftflexion/-extension und $q_{KFE}$ für die Knieflexion/-extension \cite{hwangboLearningAgileDynamic2019, hutterANYmalHighlyMobile2016}. Moderne Plattformen wie das ANYmal zeichnen sich durch die Integration von Gelenk-Offsets aus, die eine volle Rotation erlauben und somit den Arbeitsraum massiv vergrößern \cite{hutterANYmalHighlyMobile2016}.
+
+\subsubsection{Kinematik und Koordinatentransformationen}
+Die Kinematik beschreibt die mathematische Beziehung zwischen den Gelenkzuständen und der resultierenden Position der Endeffektoren im Raum. Die Inverse Kinematik wird unter anderem genutzt, um geplante Trajektorien aus dem kartesischen Arbeitsraum in spezifische Zielgelenkwinkel abzubilden \cite{bussolaGuidedReinforcementLearning2025, yinRunDogLearning2021}, oder räumliche Trajektorien auf verschiedene Roboter-Morphologien zu übertragen \cite{bussolaGuidedReinforcementLearning2025}. \newline
+Neben den kartesischen Weltkoordinatensystem werden in der Robotik verschiedene weiter Koordinatensysteme verwendet, dessen Beziehungen durch eine Koordinatentransformation beschrieben werden können; darunter fallen unter anderem z.B. das Körperkoordinatensystem oder Inertialsystem bei einem Roboter \cite{hwangboLearningAgileDynamic2019, yinRunDogLearning2021}. Dessen Ausrichtung wird häufig über eine Inertial Measurement Unit oder IMU erfasst, welche die Richtung des Schwerkraftsvektors $\phi_g$ im lokalen IMU-Frame bestimmt \cite{hwangboLearningAgileDynamic2019}. 
+
+Die Körperhaltung werden dabei oft mit Euler-Winkel als Roll, Pitch und Yaw (oder in Winkeln $\alpha, \beta, \gamma$) beschrieben, welche aneinanderreihende Rotationen um die Koordinatenachsen beschreibt \cite{Siciliano2016Handbook}. Die Rotationsmatrix der gängigen Z-Y-X Konvention wird beispielsweise als Produkt von Einzelrotationen (vgl. \cite{Siciliano2016Handbook}):
+\begin{equation}
+	R(\alpha, \beta, \gamma) = R_z(\alpha)R_y(\beta)R_z(\gamma)
+\end{equation} 
+berechnet mit:
+\begin{equation}
+\tiny
+	R_z(\alpha) = 
+	\begin{bmatrix}
+		\cos(\alpha) & -\sin(\alpha) & 0 \\
+		\sin(\alpha) & \cos(\alpha) & 0 \\
+		0 & 0 & 1
+	\end{bmatrix}, 
+	R_y(\beta) = 
+	\begin{bmatrix}
+		\cos(\beta) & 0 & \sin(\beta) \\
+		0 & 1 & 0 \\
+		-\sin(\beta) & 0 & \cos(\beta)
+	\end{bmatrix}, 
+	R_x(\gamma) = 
+	\begin{bmatrix}
+		1 & 0 & 0 \\
+		0 & \cos(\gamma) & -\sin(\gamma) \\
+		0 & \sin(\gamma) & \cos(\gamma)
+	\end{bmatrix}
+\normalsize
+\end{equation}
+Um die Euler-Winkel aus einer gegebenen Rotationsmatrix $R = [r_i{ij}]$ zu berechnen, verwendet man die Beziehung der Matrix und den Standard-Eulerwinkeldefinitionen, bei denen man die inverse trignometrische Funktionen der Rotationsmatrizen berechnet \cite{Siciliano2016Handbook}. \newline
+Bei bestimmten Winkelstellungen, insbesondere wenn der Pitch $\pm90\circ$ beträgt, treten sogenannte Singularitäten auf, welche zum Gimbal Lock führen, bei dem zwei Rotationsachsen kollinear werden und ein Freiheitsgrad der Rotation verloren geht \cite{Siciliano2016Handbook}.
+
+Um diese Einschränkungen zu umgehen, weden in der Robotik häufig Quaternionen eingesetzt. Diese stellen Rotationen als vierdimensionale Vektoren 
+\begin{equation}
+	q = \begin{bmatrix}
+		q_0 \\
+		q_1 \\
+		q_2 \\
+		q_3
+	\end{bmatrix} = \begin{bmatrix}
+	\cos(\frac{\theta}{2}) \\
+	n_x\sin(\frac{\theta}{2}) \\
+	n_y\sin(\frac{\theta}{2}) \\
+	n_z\sin(\frac{\theta}{2})
+	\end{bmatrix} \text{\cite{Siciliano2016Handbook}}
+\end{equation}
+dar, wobei $\theta$ der Rotationswinkel um die Einheitsachse $n = (n_x, n_y, n_z)^T$ ist, und vermeiden Gimbal Lock, da sie kontinuierliche und eindeutige Repräsentationen jeder dreidimensionalen Drehung ermöglichen. Die Transformation von Euler-Winkeln in Quaternionen gewährleistet somit eine stabile und numerisch robuste Darstellung der Orientierung und werden mit dieser Umrechnungsformel transformiert (vgl. \cite{Diebel2006}):
+\begin{equation}
+\begin{aligned}
+	q_0 &= \cos(\frac{\alpha}{2})\cos(\frac{\beta}{2})\cos(\frac{\gamma}{2}) + \sin(\frac{\alpha}{2})\sin(\frac{\beta}{2})\sin(\frac{\gamma}{2}), \\
+	q_1 &= \sin(\frac{\alpha}{2})\cos(\frac{\beta}{2})\cos(\frac{\gamma}{2}) - \cos(\frac{\alpha}{2})\sin(\frac{\beta}{2})\sin(\frac{\gamma}{2}), \\
+	q_2 &= \cos(\frac{\alpha}{2})\sin(\frac{\beta}{2})\cos(\frac{\gamma}{2}) + \sin(\frac{\alpha}{2})\cos(\frac{\beta}{2})\sin(\frac{\gamma}{2}), \\
+	q_3 &= \cos(\frac{\alpha}{2})\cos(\frac{\beta}{2})\sin(\frac{\gamma}{2}) - \sin(\frac{\alpha}{2})\sin(\frac{\beta}{2})\cos(\frac{\gamma}{2})
+\end{aligned}
+\end{equation}
+% TODO Bild einfügen: kartesisch vs sphärisch vs euler
+\subsection{Mathematische Problemformulierung mittels MDP}
+
+% TODO nach MDP in RL Grundlagen einfügen
+\subsection{Dynamik und Kontaktmodellierung}
+Die Simulation der quadrupeden Robotern basiert auf einem dynamischen Modell mit Berücksichtigung von Kontaktkräften zwischen Beinen und Untergrund, dessen Implementierung vollständig vom Framework übernommen wird \cite{authorsGenesisGenerativeUniversal2024}.
