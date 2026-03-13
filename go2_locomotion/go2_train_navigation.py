@@ -42,7 +42,7 @@ def get_navigation_train_cfg(exp_name, max_iterations):
         "algorithm": {
             "class_name": "PPO",
             "clip_param": 0.2,
-            "desired_kl": 0.01,
+            "desired_kl": 0.005,  # Lowered: 0.01 caused adaptive LR to spike to 1e-2 when stuck at obstacle plateau, corrupting the walking mean
             "entropy_coef": 0.01,  # Overridden per curriculum stage in main()
             "gamma": 0.99,
             "lam": 0.95,
@@ -58,7 +58,7 @@ def get_navigation_train_cfg(exp_name, max_iterations):
             "activation": "elu",
             "actor_hidden_dims": [512, 256, 128],
             "critic_hidden_dims": [512, 256, 128],
-            "init_noise_std": 0.5,  # Lower for standing - converges faster, less initial chaos
+            "init_noise_std": 0.5,
             "class_name": "ActorCritic",
         },
         "runner": {
@@ -143,7 +143,10 @@ def get_navigation_cfgs(curriculum_stage=1):
             "height",
             "upright",
             "landing_stability",
-            "jump_clearance",
+            "jump_clearance",    # legacy — superseded by phase-gated below; kept for compat
+            "jump_approach",     # phase 1: potential-based rise toward obstacle top (Ng 1999)
+            "jump_takeoff",      # phase 2: explosive upward velocity < 1.5m from obstacle
+            "jump_flight",       # phase 3: sustained height above obstacle top (highest value)
             "lin_vel_z",
             "action_rate",
             "similar_to_default",
@@ -154,6 +157,8 @@ def get_navigation_cfgs(curriculum_stage=1):
             "goal_heading",
             "keep_moving",
             "blocker_clearance",
+            "centerline_near_blocker",
+            "fast_completion",
         ]},
         "base_height_target": 0.42,
     }
@@ -238,9 +243,13 @@ def get_navigation_cfgs(curriculum_stage=1):
         
         # Goal-reaching rewards - progress-driven, not proximity-hovering
         reward_cfg["reward_scales"]["target_proximity"] = 8.0      # Increased: linear gradient (1-dist/10) must overpower keep_moving at long range
-        reward_cfg["reward_scales"]["target_reached"] = 20.0       # Strong success bonus
+        reward_cfg["reward_scales"]["target_reached"] = 30.0       # Strong success bonus
         reward_cfg["reward_scales"]["target_progress"] = 10.0       # Dominant - must MOVE toward goal, not just be near it
-        reward_cfg["reward_scales"]["obstacle_avoidance"] = 4.0    # BALANCED - provides safety feedback without encouraging excessive retreat; lower than progress rewards to maintain forward drive
+        reward_cfg["reward_scales"]["obstacle_avoidance"] = 5.0    # BALANCED - provides safety feedback without encouraging excessive retreat; lower than progress rewards to maintain forward drive
+        reward_cfg["reward_scales"]["keep_moving"] = 0.1           # Minimal: only breaks wall-lean local optimum; reduced so it doesn't outcompete proximity gradient
+        reward_cfg["reward_scales"]["blocker_clearance"] = 3.0     # Rewards navigating past blocker X; fills reward-dead zone during lateral avoidance maneuver
+        reward_cfg["reward_scales"]["goal_heading"] = 3.0          # Re-orient toward goal after passing blocker; fires at all ranges
+        reward_cfg["reward_scales"]["fast_completion"] = 10.0               # Incentivize quick success after passing blocker; encourages efficient avoidance, not just safe avoidance
         
         # Movement quality
         reward_cfg["reward_scales"]["action_rate"] = -0.05         # Smooth movement
@@ -249,9 +258,6 @@ def get_navigation_cfgs(curriculum_stage=1):
         
         # DISABLE competing rewards for goal-reaching
         reward_cfg["reward_scales"]["forward_movement"] = 0.0      # DISABLED - X-velocity check penalizes lateral avoidance maneuvers
-        reward_cfg["reward_scales"]["keep_moving"] = 0.1           # Minimal: only breaks wall-lean local optimum; reduced so it doesn't outcompete proximity gradient
-        reward_cfg["reward_scales"]["blocker_clearance"] = 3.0     # Rewards navigating past blocker X; fills reward-dead zone during lateral avoidance maneuver
-        reward_cfg["reward_scales"]["goal_heading"] = 3.0          # Re-orient toward goal after passing blocker; fires at all ranges
         reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.0
         reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.0
 
@@ -270,51 +276,97 @@ def get_navigation_cfgs(curriculum_stage=1):
         env_cfg["dynamic_obstacle_distance"] = 4.0  # Closer: robot reaches it in ~8s at 0.5m/s (within 600-step episode)
     
     elif curriculum_stage == 4:
-        # Stage 4: Goal-reaching with LOW obstacle jumping (use --dynamic_obstacles)
-        command_cfg["lin_vel_x_range"] = [0.3, 0.6]  # Moderate speed
-        command_cfg["lin_vel_y_range"] = [-0.1, 0.1]  # Minimal lateral
-        command_cfg["ang_vel_range"] = [-0.2, 0.2]    # Minimal turning
-    
+        # Stage 4: Jump over a LOW obstacle to reach goal (use --dynamic_obstacles)
+        # Based on: "Learning to Jump in Minutes" (Zhuang et al. 2023) +
+        #           "Parkour with Legged Robots" (Zhuang et al. 2024, ETH RSL) +
+        #           Potential-based shaping (Ng, Harada & Russell 1999)
+        #
+        # Core design: three phase-gated rewards that each fire for discoverable behaviours:
+        #   phase 1 (approach): potential Φ = robot rises toward obstacle top → dense gradient from any distance
+        #   phase 2 (takeoff):  explosive upward velocity < 1.5m → heavy reward, no moving_toward condition
+        #   phase 3 (flight):   body above obstacle top → highest value, only reachable by actually clearing it
+        # Height curriculum: starts at 5cm (clearable by high-stepping normal gait) and auto-advances
+        # to 15cm target as the robot accumulates successful crossings.
+        command_cfg["lin_vel_x_range"] = [0.45, 0.85]
+        command_cfg["lin_vel_y_range"] = [-0.03, 0.03]
+        command_cfg["ang_vel_range"] = [-0.05, 0.05]   # Keep runs nearly straight to reduce bypass behaviors
+
         reward_cfg["tracking_sigma"] = 0.25
-        reward_cfg["jump_height_threshold"] = 0.08  # Obstacles below this = low (jumpable)
+        reward_cfg["jump_height_threshold"] = 0.2
 
-        # Stability
-        reward_cfg["reward_scales"]["upright"] = 3.0
-        reward_cfg["reward_scales"]["height"] = 1.5
-        
-        # Goal-reaching rewards (active with --dynamic_obstacles)
-        reward_cfg["reward_scales"]["target_proximity"] = 3.0      # Guide to target
-        reward_cfg["reward_scales"]["target_reached"] = 15.0       # Success bonus
-        
-        # Jumping rewards - PRIMARY for low obstacles
-        reward_cfg["reward_scales"]["jump_clearance"] = 10.0       # Reward jumping over
-        reward_cfg["reward_scales"]["landing_stability"] = 3.0     # Stable landing
-        
-        # Movement quality
-        reward_cfg["reward_scales"]["action_rate"] = -0.05
-        reward_cfg["reward_scales"]["lin_vel_z"] = -0.1           # Allow vertical movement
-        reward_cfg["reward_scales"]["similar_to_default"] = -0.01
-        reward_cfg["reward_scales"]["symmetry"] = -0.05
-        
-        # DISABLE avoidance - we want robot to jump, not avoid
+        # Stability: upright only — height disabled so jump arc is never penalised
+        reward_cfg["reward_scales"]["upright"] = 2.0
+        reward_cfg["reward_scales"]["height"] = 0.0
+
+        # === PHASE-GATED JUMP REWARDS (replaces monolithic jump_clearance) ===
+        # Phase 1: Ng et al. 1999 potential — height_frac × exp(-dist/1.5).
+        # Always-on dense gradient; reduced scale (was 5.0) because the new impl fires
+        # more broadly (no velocity gate), so per-step magnitude is already well-covered.
+        reward_cfg["reward_scales"]["jump_approach"] = 1.2
+        # Phase 2: Explosive takeoff at the wall (gate tightened 1.5→0.8 m, v_z² reward).
+        # Scale reduced from 15→10 because v_z² returns up to 4.0 vs the old clamp(v_z,0,2)=2.0,
+        # so effective maximum per step is comparable.
+        reward_cfg["reward_scales"]["jump_takeoff"] = 8.0
+        # Phase 3: Flight — clearance threshold halved (obs_h×0.5 instead of obs_h),
+        # spatial gate tightened (2.5→1.5 m). Scale increased 25→35 to keep flight
+        # dominant even though it now fires more easily at curriculum start.
+        reward_cfg["reward_scales"]["jump_flight"] = 18.0
+        # Legacy jump_clearance: zero — superseded by phase rewards above
+        reward_cfg["reward_scales"]["jump_clearance"] = 0.0
+        # Landing stability
+        reward_cfg["reward_scales"]["landing_stability"] = 4.0
+        # Reward once past the blocker — fills the dead zone while body is above/behind obstacle
+        reward_cfg["reward_scales"]["blocker_clearance"] = 1.5
+        reward_cfg["reward_scales"]["centerline_near_blocker"] = -6.0
+
+        # Goal-reaching (secondary objective — robot reaches green cylinder beyond blocker)
+        reward_cfg["reward_scales"]["target_proximity"] = 2.0
+        reward_cfg["reward_scales"]["target_reached"] = 18.0
+        reward_cfg["reward_scales"]["target_progress"] = 6.0
+        reward_cfg["reward_scales"]["goal_heading"] = 1.5
+        reward_cfg["reward_scales"]["fast_completion"] = 6.0
+
+        # Walking base: keep locomotion quality so policy doesn't forget how to walk
+        reward_cfg["reward_scales"]["tracking_lin_vel"] = 1.5
+        reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.4
+        reward_cfg["reward_scales"]["forward_movement"] = 0.6
+        reward_cfg["reward_scales"]["similar_to_default"] = -0.04
+        reward_cfg["reward_scales"]["action_rate"] = -0.02
+        reward_cfg["reward_scales"]["symmetry"] = -0.08
+        reward_cfg["reward_scales"]["lin_vel_z"] = -0.05
+
+        # No avoidance: jump, don't dodge
         reward_cfg["reward_scales"]["obstacle_avoidance"] = 0.0
-        reward_cfg["reward_scales"]["forward_movement"] = 0.0
-        reward_cfg["reward_scales"]["tracking_lin_vel"] = 0.0
-        reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.0
 
-        env_cfg["episode_length_s"] = 30.0
+        env_cfg["episode_length_s"] = 30.0   # Short: obstacle is 2m away, each attempt is quick
         env_cfg["use_obstacles"] = True
-        env_cfg["terminate_on_collision"] = False
-        
-        # Dynamic obstacle configuration (LOW obstacle - can jump)
-        env_cfg["dynamic_obstacle_height"] = 0.06   # Low enough to jump (YELLOW)
-        env_cfg["dynamic_obstacle_width"] = 1.0     # Wide - force jumping, not sidestepping
-        env_cfg["dynamic_obstacle_distance"] = 3.0  # Slightly closer
-        
-        # Relaxed termination for jumping
-        env_cfg["termination_if_pitch_greater_than"] = 25
-        env_cfg["termination_if_roll_greater_than"] = 25
-        env_cfg["termination_if_base_height_lower_than"] = 0.18
+        env_cfg["terminate_on_collision"] = False  # base link never contacts a ≤15cm box
+
+        # === HEIGHT CURRICULUM CONFIG ===
+        # Start at 5cm — reachable by normal high-stepping from walking checkpoint.
+        # Auto-advances every jump_success_threshold successful crossings.
+        env_cfg["jump_curriculum_start_height"] = 0.05
+        env_cfg["jump_curriculum_target_height"] = 0.15
+        env_cfg["jump_curriculum_step"] = 0.025              # 5→7.5→10→12.5→15 cm
+        env_cfg["jump_success_threshold"] = 200              # crossings per level before advancing
+
+        # Obstacle geometry
+        env_cfg["dynamic_obstacle_height"] = 0.15            # max/target height (curriculum goes up to this)
+        env_cfg["dynamic_obstacle_width"] = 0.55
+        env_cfg["dynamic_obstacle_distance"] = 2.0           # 2m ahead: obstacle dominates from step 1
+
+        # Keep the jump line centered and require true airborne crossing for curriculum credit.
+        env_cfg["jump_centerline_tolerance"] = 0.35
+        env_cfg["jump_centerline_penalty_window"] = 1.8
+        env_cfg["jump_success_x_margin"] = 0.25
+        env_cfg["jump_success_height_margin"] = 0.03
+        env_cfg["jump_success_clearance_factor"] = 0.35
+        env_cfg["jump_landing_window"] = 1.4
+
+        # Relaxed termination
+        env_cfg["termination_if_pitch_greater_than"] = 40
+        env_cfg["termination_if_roll_greater_than"] = 40
+        env_cfg["termination_if_base_height_lower_than"] = 0.1
 
     elif curriculum_stage == 5:
         # Stage 5: Full navigation
@@ -394,7 +446,11 @@ def main():
         1: 0.001,  # Standing: very low - policy must converge and stay converged
         2: 0.02,   # Walking: high - must explore new gait behaviors from standing init
         3: 0.005,   # Navigation: moderate - some exploration for avoidance strategies
-        4: 0.01,   # Jumping: moderate - some exploration for jump timing
+        4: 0.005,  # Jumping: reduced from 0.02 — high entropy caused noise_std to spiral
+                   # to 5.3+ over 900 iters, producing random actions that could never
+                   # execute the coordinated crouch-leap needed for jump_flight.
+                   # 0.005 preserves enough exploration for joint-space discovery while
+                   # allowing the policy to converge on the approach/takeoff gradient.
         5: 0.005,  # Full navigation: low - refine learned behaviors
     }
     train_cfg["algorithm"]["entropy_coef"] = stage_entropy.get(args.curriculum_stage, 0.01)

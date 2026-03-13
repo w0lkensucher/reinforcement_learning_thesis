@@ -49,6 +49,7 @@ def main():
                         default="none", help="Type of obstacles to add during evaluation")
     parser.add_argument("--silent", action='store_true', help="Suppress detailed output")
     parser.add_argument("--dynamic_obstacles", action='store_true', help="Enable dynamic obstacles during evaluation")
+    parser.add_argument("--jumping", action='store_true', help="Enable jumping obstacles during evaluation")
     args = parser.parse_args()
 
     gs.init()
@@ -56,7 +57,8 @@ def main():
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = pickle.load(open(f"logs/{args.exp_name}/cfgs.pkl", "rb"))
     reward_cfg["reward_scales"] = {}
-    env_cfg["terminate_on_collision"] = True
+    # Keep terminate_on_collision from the saved cfg so stage-4 jump checkpoints
+    # aren't wrongly terminated by pitch spikes caused by physics blockage
     
     # max_sim_step = int(env_cfg["episode_length_s"] * 30) 
     episode_length_s = 60
@@ -104,6 +106,16 @@ def main():
         env_cfg["obstacle_types"] = ["box"]
         env_cfg["obstacle_height_range"] = [0.05, 0.15]
         env_cfg["obstacle_width_range"] = [0.15, 0.3]
+        env_cfg["obstacle_spacing_min"] = 2.0
+        env_cfg["clear_radius"] = 3.0
+        # Override width so the robot can physically leap over the obstacle
+        # (1.0m trained width is too wide to clear even with a forward jump)
+        env_cfg["dynamic_obstacle_width"] = 0.4
+
+    if args.jumping:
+        # env_cfg["obstacle_height_range"] = [0.2, 0.4]  # Taller obstacles for jumping
+        env_cfg["dynamic_obstacle_height"] = 0.2   # Medium - encourages jumps but not excessively high ones that might be too difficult
+        env_cfg["obstacle_width_range"] = [0.3, 0.6]
         env_cfg["obstacle_spacing_min"] = 2.0
         env_cfg["clear_radius"] = 3.0
 

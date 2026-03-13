@@ -30,6 +30,10 @@ class Go2NavigationEnv(Go2BaseEnv):
         self._setup_robot()
         self._create_obstacles()
         self._setup_buffers()
+
+        # Track strict curriculum success per environment (one credit per episode).
+        self.jump_success_armed = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        self.jump_success_counted = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         
         # optional camera
         if self.env_cfg.get("visualize_camera", True):
@@ -395,42 +399,65 @@ class Go2NavigationEnv(Go2BaseEnv):
 
             else:
                 print("Dynamic obstacles enabled")
-                # Place two obstacles: one to avoid/jump and one target behind it
                 base_init_pos = self.env_cfg.get('base_init_pos', [0.0, 0.0, 0.42])
                 base_yaw = self.env_cfg.get('base_init_yaw', 0.0)
-                
-                # Get configurable obstacle parameters from env_cfg
-                obstacle_height = self.env_cfg.get('dynamic_obstacle_height', 0.3)  # Default: high obstacle
+
                 obstacle_width = self.env_cfg.get('dynamic_obstacle_width', 0.4)
-                obstacle_distance = self.env_cfg.get('dynamic_obstacle_distance', 3.5)
-                
-                # Determine obstacle color and type based on height
-                jump_threshold = self.reward_cfg.get('jump_height_threshold', 0.08)
-                if obstacle_height < jump_threshold:
-                    # Low obstacle (jumpable) - YELLOW
-                    obstacle_color = (1.0, 1.0, 0.0, 1.0)
-                    obstacle_type = "low"
-                else:
-                    # High obstacle (must avoid) - RED
-                    obstacle_color = (1.0, 0.0, 0.0, 1.0)
-                    obstacle_type = "high"
-                
-                # Obstacle 1: To be avoided or jumped - Color depends on height
+                obstacle_distance = self.env_cfg.get('dynamic_obstacle_distance', 2.0)
+
+                # ── Height curriculum ────────────────────────────────────────────────
+                # Each level gets its own Box entity of the correct size, created before
+                # scene.build(). Only the active level sits in front of the robot; all
+                # others are parked at (1000, 1000, h/2) where they rest on the ground
+                # harmlessly. Advancing the curriculum swaps positions via set_pos().
+                start_h  = self.env_cfg.get('jump_curriculum_start_height', 0.05)
+                target_h = self.env_cfg.get('dynamic_obstacle_height', 0.15)
+                step_h   = self.env_cfg.get('jump_curriculum_step', 0.025)
+
+                levels = []
+                h = start_h
+                while h < target_h - 1e-6:
+                    levels.append(round(h, 4))
+                    h += step_h
+                levels.append(target_h)   # always include exact target
+
+                self.curriculum_heights   = levels
+                self.curriculum_level     = 0
+                self.jump_curriculum_height = levels[0]
+                self.jump_success_count   = 0
+                self.jump_success_threshold = self.env_cfg.get('jump_success_threshold', 200)
+                self.curriculum_entities  = []   # one entity per level
+
+                jump_threshold = self.reward_cfg.get('jump_height_threshold', 0.2)
+
                 x1 = base_init_pos[0] + obstacle_distance * np.cos(base_yaw)
                 y1 = base_init_pos[1] + obstacle_distance * np.sin(base_yaw)
-                geom1 = gs.morphs.Box(
-                    pos=(x1, y1, obstacle_height / 2),
-                    size=(obstacle_width, obstacle_width, obstacle_height)
-                )
-                surface1 = gs.surfaces.Default(color=obstacle_color)
-                material1 = gs.materials.Rigid(friction=0.8, rho=10000.0)
-                entity1 = self.scene.add_entity(geom1, material=material1, surface=surface1)
-                self.obstacle_entities.append(entity1)
-                self.obstacle_positions.append([x1, y1, obstacle_height, obstacle_type])
-                
-                # Object 2: Target object behind the first obstacle - GREEN
-                dist2 = obstacle_distance + 5.0  # meters ahead (5m behind the blocker)
-                width2 = 0.25  # Smaller target object
+
+                for i, lh in enumerate(levels):
+                    active = (i == 0)
+                    px = x1 if active else 1000.0
+                    py = y1 if active else 1000.0
+                    color = (1.0, 1.0, 0.0, 1.0) if lh < jump_threshold else (1.0, 0.5, 0.0, 1.0)
+                    obs_type = "low" if lh < jump_threshold else "high"
+
+                    geom = gs.morphs.Box(
+                        pos=(px, py, lh / 2),
+                        size=(obstacle_width, obstacle_width, lh)
+                    )
+                    surface  = gs.surfaces.Default(color=color)
+                    material = gs.materials.Rigid(friction=0.8, rho=10000.0)
+                    entity   = self.scene.add_entity(geom, material=material, surface=surface)
+                    self.curriculum_entities.append(entity)
+
+                    if active:
+                        self.obstacle_entities.append(entity)
+                        self.obstacle_positions.append([x1, y1, lh, obs_type])
+
+                print(f"Curriculum heights: {[f'{lh*100:.1f}cm' for lh in levels]}")
+
+                # ── Target cylinder (green goal object) ──────────────────────────────
+                dist2   = obstacle_distance + 5.0
+                width2  = 0.25
                 height2 = 0.15
                 x2 = base_init_pos[0] + dist2 * np.cos(base_yaw)
                 y2 = base_init_pos[1] + dist2 * np.sin(base_yaw)
@@ -439,9 +466,9 @@ class Go2NavigationEnv(Go2BaseEnv):
                     radius=width2 / 2,
                     height=height2
                 )
-                surface2 = gs.surfaces.Default(color=(0.0, 1.0, 0.0, 1.0))  # Green surface
+                surface2  = gs.surfaces.Default(color=(0.0, 1.0, 0.0, 1.0))
                 material2 = gs.materials.Rigid(friction=0.8, rho=10000.0)
-                entity2 = self.scene.add_entity(geom2, material=material2, surface=surface2)
+                entity2   = self.scene.add_entity(geom2, material=material2, surface=surface2)
                 self.obstacle_entities.append(entity2)
                 self.obstacle_positions.append([x2, y2, height2, "cylinder"])
 
@@ -662,6 +689,31 @@ class Go2NavigationEnv(Go2BaseEnv):
         return clearance
 
 
+    def _reward_centerline_near_blocker(self):
+        """Penalize side-stepping near the blocker to discourage go-around solutions."""
+        if not self.dynamic_obstacles or len(self.obstacle_positions) < 1:
+            return torch.zeros(self.num_envs, device=self.device)
+
+        blocker_x = self.obstacle_positions[0][0]
+        blocker_y = self.obstacle_positions[0][1]
+        robot_x = self.base_pos[:, 0]
+        robot_y = self.base_pos[:, 1]
+
+        x_window = self.env_cfg.get('jump_centerline_penalty_window', 1.8)
+        y_tolerance = self.env_cfg.get('jump_centerline_tolerance', 0.35)
+        x_success_margin = self.env_cfg.get('jump_success_x_margin', 0.25)
+
+        x_dist = torch.abs(robot_x - blocker_x)
+        y_error = torch.abs(robot_y - blocker_y)
+
+        # High penalty only around the blocker and before true crossing.
+        proximity = torch.clamp(1.0 - x_dist / max(x_window, 1e-6), min=0.0, max=1.0)
+        before_cross = (robot_x <= (blocker_x + x_success_margin)).float()
+        lateral_overrun = torch.clamp(y_error - y_tolerance, min=0.0, max=2.0)
+
+        return lateral_overrun * proximity * before_cross
+
+
     def _reward_straight_walk_when_clear(self):
         """Reward walking straight when no obstacles are nearby"""
         low_obs, high_obs, low_dist, high_dist = self._detect_nearby_obstacles()
@@ -715,44 +767,183 @@ class Go2NavigationEnv(Go2BaseEnv):
         vertical_velocity = self.base_lin_vel[:, 2]
         normal_height = 0.42
         
-        # Calculate height above normal
         height_above_normal = current_height - normal_height
-        
         jump_reward = torch.zeros(self.num_envs, device=self.device)
         
         for obs_data in self.obstacle_positions:
             obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
             obs_height = obs_data[2]
             
-            # Distance to obstacle
+            # Distance and direction to obstacle
             to_obstacle = obs_pos.unsqueeze(0) - robot_pos
             distance = torch.norm(to_obstacle, dim=1)
             
-            # WIDER detection zone for easier discovery (1.5m → 2.5m)
             near_obstacle = distance < 2.5
-            approaching = distance < 2.0  # Within 2m
+            approaching = distance < 2.0
             
-            # Multi-tiered reward system for bootstrapping:
-            
-            # Tier 1: Reward upward velocity when approaching obstacle (easiest to discover)
-            upward_velocity_reward = torch.clamp(vertical_velocity, 0, 1.0) * 0.3  # Max 0.3
-            tier1 = torch.where(approaching & (vertical_velocity > 0.1), upward_velocity_reward, torch.zeros_like(upward_velocity_reward))
-            
-            # Tier 2: Reward being airborne near obstacle (LOWERED threshold: 5cm → 2cm)
-            is_airborne = height_above_normal > 0.02  # Much easier to trigger
-            airborne_reward = torch.clamp(height_above_normal * 5.0, 0, 1.0)  # Scale height to reward
-            tier2 = torch.where(near_obstacle & is_airborne, airborne_reward, torch.zeros_like(airborne_reward))
-            
-            # Tier 3: Bonus for clearing the obstacle height
-            clearance_height = torch.clamp(height_above_normal - obs_height, 0, 0.2)
-            clearance_reward = (clearance_height / 0.2) * 2.0  # Max 2.0 (increased from 1.0)
-            tier3 = torch.where(near_obstacle & (height_above_normal > obs_height), clearance_reward, torch.zeros_like(clearance_reward))
-            
-            # Combine all tiers
-            jump_reward += tier1 + tier2 + tier3
+            # Directional check - only computed once, used where relevant
+            to_obstacle_dot = (to_obstacle * self.base_lin_vel[:, :2]).sum(dim=1)
+            moving_toward = to_obstacle_dot > 0
+
+            at_wall = distance < 0.8
+
+            # Tier 0: reward body ELEVATION near obstacle.
+            # Previously rewarded crouching (going DOWN) — this was backwards.
+            # The gradient we need is: being higher near an obstacle = good.
+            # No moving_toward: forward vel is ~0 when physically blocked.
+            elevation = torch.clamp(height_above_normal, 0.0, 0.25)  # 0 at normal, max at 25cm above
+            tier0 = torch.where(
+                near_obstacle,
+                elevation * 2.0,  # max 0.5 per step
+                torch.zeros_like(elevation)
+            )
+
+            # Tier 0b: constant floor bonus at the wall so reward never goes negative at contact
+            tier0_wall = torch.where(at_wall, torch.full_like(distance, 0.05), torch.zeros_like(distance))
+
+            # Tier 1: Any upward velocity near obstacle.
+            # REMOVED moving_toward: physical blockage kills forward vel → moving_toward=False
+            # → tier1 was zero at the exact moment legs were pushing off the box.
+            # Lowered threshold 0.1 → 0.03: small upward velocity is still a learning signal.
+            upward_velocity_reward = torch.clamp(vertical_velocity, 0, 1.0) * 0.5
+            tier1 = torch.where(
+                near_obstacle & (vertical_velocity > 0.03),
+                upward_velocity_reward,
+                torch.zeros_like(upward_velocity_reward)
+            )
+
+            # Tier 2: Airborne near obstacle.
+            # REMOVED moving_toward: same reason as Tier 1 — body can be rising straight up
+            # with near-zero forward vel and this tier was producing 0 reward.
+            is_airborne = height_above_normal > 0.06
+            airborne_reward = torch.clamp(height_above_normal * 5.0, 0, 1.0)
+            tier2 = torch.where(
+                near_obstacle & is_airborne,
+                airborne_reward,
+                torch.zeros_like(airborne_reward)
+            )
+
+            # Tier 3: Clearing obstacle height (unchanged)
+            clearance_height = torch.clamp(current_height - (normal_height + obs_height * 0.7), 0, 0.2)
+            tier3 = torch.where(
+                near_obstacle & (clearance_height > 0),
+                torch.clamp((clearance_height / 0.2) * 2.0, 0, 2.0),
+                torch.zeros(self.num_envs, device=self.device)
+            )
+
+            jump_reward += tier0 + tier0_wall + tier1 + tier2 + tier3
         
         return jump_reward
-    
+
+    def _reward_jump_approach(self):
+        """Phase 1 — potential-based approach shaping (Ng et al. 1999).
+        Φ(s) = clamp((base_z - z_stand) / obs_h, 0, 1) × exp(-dist / 1.5)
+        Rewarding height × proximity simultaneously creates a dense gradient from
+        any distance without gating on velocity, which was allowing gait-oscillation
+        bouncing to satisfy the old v_z condition without committing to a real jump.
+        The exponential proximity factor peaks at the obstacle and fades smoothly,
+        so the policy learns to approach AND elevate concurrently."""
+        if not self.dynamic_obstacles or len(self.obstacle_positions) < 1:
+            return torch.zeros(self.num_envs, device=self.device)
+
+        robot_pos = self.base_pos[:, :2]
+        base_z    = self.base_pos[:, 2]
+        z_stand   = 0.42
+
+        obs_data  = self.obstacle_positions[0]
+        obs_pos   = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+        obs_h     = getattr(self, 'jump_curriculum_height', float(obs_data[2]))
+        blocker_x = float(obs_data[0])
+
+        # Stop paying jump shaping once the blocker is crossed to avoid farming
+        # repeated hops after the core maneuver is complete.
+        x_margin = self.env_cfg.get('jump_success_x_margin', 0.25)
+        before_cross = self.base_pos[:, 0] <= (blocker_x + x_margin)
+
+        distance  = torch.norm(obs_pos.unsqueeze(0) - robot_pos, dim=1)
+
+        # Height potential: 0 at normal standing, 1 at jump target CoM height
+        height_frac = torch.clamp((base_z - z_stand) / max(float(obs_h), 0.01), 0.0, 1.0)
+        # Exponential proximity: 1.0 at the obstacle, ~0.37 at 1.5 m, ~0.04 at 5 m
+        prox = torch.exp(-distance / 1.5)
+
+        return torch.where(before_cross, height_frac * prox, torch.zeros(self.num_envs, device=self.device))
+
+    def _reward_jump_takeoff(self):
+        """Phase 2 — explosive upward-velocity at the obstacle wall (Zhuang et al. 2023).
+        Two key changes from the original:
+          (1) Gate tightened from 1.5 m → 0.8 m: robot must be physically at the wall.
+              The old 1.5 m gate fired during the entire approach, letting gait bouncing
+              accumulate takeoff reward without ever attempting a real jump.
+          (2) Minimum v_z threshold of 0.3 m/s filters out the ~0.1 m/s oscillations
+              that arise from normal trotting, so only genuine upward impulses score.
+          (3) Reward scaled as v_z² (power, not velocity) to disproportionately prefer
+              explosive single-impulse jumps over sustained small-velocity bouncing."""
+        if not self.dynamic_obstacles or len(self.obstacle_positions) < 1:
+            return torch.zeros(self.num_envs, device=self.device)
+
+        robot_pos = self.base_pos[:, :2]
+        vz        = self.base_lin_vel[:, 2]
+
+        obs_data  = self.obstacle_positions[0]
+        obs_pos   = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+        blocker_x = float(obs_data[0])
+        blocker_y = float(obs_data[1])
+        distance  = torch.norm(obs_pos.unsqueeze(0) - robot_pos, dim=1)
+
+        at_wall   = distance < 0.8   # physically at the obstacle face
+        explosive = vz > 0.3         # filters ~0.1 m/s gait-oscillation noise
+        x_margin = self.env_cfg.get('jump_success_x_margin', 0.25)
+        y_tol = self.env_cfg.get('jump_centerline_tolerance', 0.35)
+        before_cross = self.base_pos[:, 0] <= (blocker_x + x_margin)
+        centered = torch.abs(self.base_pos[:, 1] - blocker_y) <= y_tol
+
+        return torch.where(at_wall & explosive & before_cross & centered,
+                           torch.clamp(vz * vz, 0.0, 4.0),
+                           torch.zeros(self.num_envs, device=self.device))
+
+    def _reward_jump_flight(self):
+        """Phase 3 — body clearance above obstacle top (Extreme Parkour, Zhuang et al. 2024).
+        Two changes from the original:
+          (1) Clearance threshold lowered from obs_h → obs_h * 0.5.  A quadruped clears
+              a box when its feet reach obs_h from the ground; the CoM only rises by
+              ~50 % of obs_h during such a manoeuvre (feet tuck while body rises).
+              The old threshold (CoM rise = 100 % obs_h) was unreachable at 15 cm,
+              which is why jump_flight was always 0.0 in the advanced_curr run.
+          (2) Spatial gate tightened from 2.5 m → 1.5 m so the reward only fires when
+              the robot is directly at or over the obstacle, not during the long approach."""
+        if not self.dynamic_obstacles or len(self.obstacle_positions) < 1:
+            return torch.zeros(self.num_envs, device=self.device)
+
+        robot_pos = self.base_pos[:, :2]
+        base_z    = self.base_pos[:, 2]
+        vx        = self.base_lin_vel[:, 0]
+
+        obs_data  = self.obstacle_positions[0]
+        obs_pos   = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
+        obs_h     = getattr(self, 'jump_curriculum_height', float(obs_data[2]))
+        blocker_x = float(obs_data[0])
+        blocker_y = float(obs_data[1])
+
+        distance = torch.norm(obs_pos.unsqueeze(0) - robot_pos, dim=1)
+
+        # Tightened proximity: robot must be directly over/at the obstacle
+        over_obstacle = distance < 1.5
+        # Threshold: CoM rises ~50 % of obstacle height when feet clear it
+        clearance_threshold = 0.42 + obs_h * 0.5
+        above_target = base_z > clearance_threshold
+        x_margin = self.env_cfg.get('jump_success_x_margin', 0.25)
+        y_tol = self.env_cfg.get('jump_centerline_tolerance', 0.35)
+        before_cross = self.base_pos[:, 0] <= (blocker_x + x_margin)
+        centered = torch.abs(self.base_pos[:, 1] - blocker_y) <= y_tol
+
+        height_bonus = torch.clamp(base_z - clearance_threshold, 0.0, 0.3)
+        fwd_bonus    = torch.clamp(1.0 + vx, 0.5, 2.5)
+
+        return torch.where(over_obstacle & above_target & before_cross & centered,
+                           height_bonus * fwd_bonus,
+                           torch.zeros(self.num_envs, device=self.device))
+
     def _reward_landing_stability(self):
         """Landing stability reward - easier to trigger during and after jumping"""
         # Return zero if no obstacles
@@ -777,19 +968,26 @@ class Go2NavigationEnv(Go2BaseEnv):
         current_height = self.base_pos[:, 2]
         vertical_velocity = self.base_lin_vel[:, 2]
         
-        # EXPANDED landing detection (easier to trigger):
+        # Landing detection: descending always counts, grounded phase only counts
+        # after a real airborne event was observed near the blocker.
         # Phase 1: Airborne and descending (LOWERED threshold: 5cm → 2cm)
         is_descending = (current_height > normal_height + 0.02) & (vertical_velocity < 0)
         
         # Phase 2: Recently landed (near ground with low vertical velocity)
         is_grounded = (current_height < normal_height + 0.08) & (torch.abs(vertical_velocity) < 0.3)
+
+        if self.dynamic_obstacles and hasattr(self, 'jump_success_armed'):
+            grounded_after_airborne = is_grounded & self.jump_success_armed
+        else:
+            grounded_after_airborne = is_grounded
         
         # Combined: reward during descent AND after landing
-        in_landing_phase = is_descending | is_grounded
+        in_landing_phase = is_descending | grounded_after_airborne
         
-        # Check if robot is near any obstacle (WIDENED: 1.0m → 2.5m)
+        # Check if robot is near any obstacle
         robot_pos = self.base_pos[:, :2]
         near_obstacle = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        landing_window = self.env_cfg.get('jump_landing_window', 1.4)
         
         for obs_data in self.obstacle_positions:
             obs_pos = torch.tensor(obs_data[:2], device=self.device, dtype=torch.float32)
@@ -798,8 +996,7 @@ class Go2NavigationEnv(Go2BaseEnv):
             to_obstacle = obs_pos.unsqueeze(0) - robot_pos
             distance = torch.norm(to_obstacle, dim=1)
             
-            # WIDENED proximity range (1.0m → 2.5m) - catches landing after clearing
-            near_obstacle |= (distance < 2.5)
+            near_obstacle |= (distance < landing_window)
         
         # Reward stability when in landing phase near obstacles
         is_jump_context = in_landing_phase & near_obstacle
@@ -886,6 +1083,10 @@ class Go2NavigationEnv(Go2BaseEnv):
         target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
         robot_pos = self.base_pos[:, :2]
         distance = torch.norm(robot_pos - target_pos, dim=1)
+
+        # Zero out reward within a certain radius (e.g., within 0.9m of goal)
+        zero_radius = 0.9
+        mask = distance >= zero_radius
         
         # Two-component reward: exponential for close range + linear for long range
         # Linear component provides gradient from far away: 1.0 at 0m, 0.0 at 10m
@@ -894,7 +1095,9 @@ class Go2NavigationEnv(Go2BaseEnv):
         exp_reward = torch.exp(-distance / 1.0)
         
         # Combine: 0.3 weight to linear (long-range) + 0.7 weight to exponential (short-range)
-        return 0.3 * linear_reward + 0.7 * exp_reward
+        reward = 0.3 * linear_reward + 0.7 * exp_reward
+        reward = reward * mask.float()  # Zero out reward within zero_radius
+        return reward
 
 
     def _reward_target_reached(self):
@@ -910,9 +1113,9 @@ class Go2NavigationEnv(Go2BaseEnv):
         # Graduated success reward: partial credit for getting close
         # 1.0 within 0.5m, 0.5 within 1.0m, 0.2 within 1.5m
         reward = torch.zeros_like(distance)
-        reward = torch.where(distance < 2.0, 0.2, reward)
-        reward = torch.where(distance < 1.5, 0.5, reward)
-        reward = torch.where(distance < 1.0, 1.0, reward)
+        # reward = torch.where(distance < 2.0, 0.2, reward)
+        # reward = torch.where(distance < 1.5, 0.5, reward)
+        reward = torch.where(distance < 0.9, 1.0, reward)
         return reward
 
 
@@ -925,6 +1128,10 @@ class Go2NavigationEnv(Go2BaseEnv):
         target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
         robot_pos = self.base_pos[:, :2]
         current_distance = torch.norm(robot_pos - target_pos, dim=1)
+
+        # Zero out reward within a certain radius (e.g., within 0.9m of goal)
+        zero_radius = 0.9
+        mask = current_distance >= zero_radius
         
         # Initialize tracking on first call
         if not hasattr(self, 'last_target_distance'):
@@ -944,8 +1151,33 @@ class Go2NavigationEnv(Go2BaseEnv):
         # Update distance tracking
         self.last_target_distance = current_distance.clone()
         
-        # Reward = velocity component toward target (positive = approaching)
-        return torch.clamp(approach_vel, min=-2.0, max=2.0)
+        # Reward = velocity component toward target (positive = approaching).
+        # Clamped to min=0 so physics bounce-back at the obstacle wall doesn't give
+        # a large negative penalty that makes "stop before obstacle" the optimal strategy.
+        reward = torch.clamp(approach_vel, min=0.0, max=2.0)
+        reward = reward * mask.float()  # Zero out reward within zero_radius
+        return reward
+    
+
+    def _reward_fast_completion(self):
+        """Reward for faster completion: higher reward for fewer steps to reach the goal."""
+        # Only reward on termination due to goal reached
+        if not self.dynamic_obstacles or len(self.obstacle_positions) != 2:
+            return torch.zeros(self.num_envs, device=self.device)
+        
+        # Mask for environments that terminated by reaching the goal
+        goal_dist_norm = self.obs_buf[:, -4]
+        termination_radius = 0.9  # Match your termination radius
+        goal_norm_thresh = termination_radius / 15.0
+        goal_reached = goal_dist_norm < goal_norm_thresh
+
+        # Calculate completion bonus: higher for fewer steps
+        max_steps = self.max_episode_length
+        steps_taken = self.episode_length_buf
+        completion_bonus = (max_steps - steps_taken) / max_steps  # Range: 0 (slow) to 1 (fast)
+
+        # Only reward on termination
+        return completion_bonus * goal_reached.float()
 
 
     def _check_termination(self):
@@ -961,7 +1193,7 @@ class Go2NavigationEnv(Go2BaseEnv):
         if self.dynamic_obstacles and len(self.obstacle_positions) == 2:        # Terminate when normalized goal distance is below threshold
             # goal_dist_norm = distance_to_goal / 15.0 (see obs_buf construction)
             # Use normalized distances from obs_buf for termination
-            termination_radius = 0.8  # meters
+            termination_radius = 0.7  # meters
             goal_norm_thresh = termination_radius / 15.0
             goal_reached = goal_dist_norm < goal_norm_thresh
             self.reset_buf |= goal_reached
@@ -973,17 +1205,22 @@ class Go2NavigationEnv(Go2BaseEnv):
 
         # Add collision termination for navigation (if enabled)
         if self.env_cfg.get('terminate_on_collision', False):
+            contacts = self.contact_sensor.read()
             # blocker_dist_norm = distance_to_blocker / 8.0 (see obs_buf construction)
-            collision_threshold = self.env_cfg.get('collision_threshold', 0.25)
-            blocker_norm_thresh = collision_threshold / 8.0
-            collision_mask = blocker_dist_norm < blocker_norm_thresh
-            self.reset_buf |= collision_mask
+            # collision_threshold = self.env_cfg.get('collision_threshold', 0.25)
+            # blocker_norm_thresh = collision_threshold / 8.0
+            # collision_mask = blocker_dist_norm < blocker_norm_thresh
+            self.reset_buf |= contacts.squeeze(-1)
     
 
     def reset_idx(self, envs_idx):
         """Override to reset navigation-specific tracking"""
         # Call base class reset
         super().reset_idx(envs_idx)
+
+        # Reset strict curriculum success tracking.
+        self.jump_success_armed[envs_idx] = False
+        self.jump_success_counted[envs_idx] = False
         
         # Reset progress tracking for goal-reaching
         if hasattr(self, 'last_target_distance'):
@@ -993,6 +1230,46 @@ class Go2NavigationEnv(Go2BaseEnv):
                 self.last_target_distance[envs_idx] = torch.norm(robot_pos[envs_idx] - target_pos, dim=1)
             else:
                 self.last_target_distance[envs_idx] = 0.0
+
+
+    def _advance_curriculum(self):
+        """Swap active blocker to the next curriculum height level.
+        Parks the old box at (1000, 1000) and teleports the new one in front of the robot.
+        Boxes are pre-built at the correct size so no resizing is needed."""
+        if not hasattr(self, 'curriculum_heights') or self.curriculum_level >= len(self.curriculum_heights) - 1:
+            return
+
+        old_level = self.curriculum_level
+        new_level = old_level + 1
+        old_h = self.curriculum_heights[old_level]
+        new_h = self.curriculum_heights[new_level]
+
+        blocker_x = self.obstacle_positions[0][0]
+        blocker_y = self.obstacle_positions[0][1]
+        all_envs  = torch.arange(self.num_envs, device=self.device)
+
+        # Park old entity far away (on the ground at its own height)
+        park_pos = torch.tensor([1000.0, 1000.0, old_h / 2], device=self.device)
+        self.curriculum_entities[old_level].set_pos(
+            park_pos.unsqueeze(0).repeat(self.num_envs, 1), envs_idx=all_envs
+        )
+
+        # Activate new entity at blocker position
+        active_pos = torch.tensor([blocker_x, blocker_y, new_h / 2], device=self.device)
+        self.curriculum_entities[new_level].set_pos(
+            active_pos.unsqueeze(0).repeat(self.num_envs, 1), envs_idx=all_envs
+        )
+
+        jump_threshold = self.reward_cfg.get('jump_height_threshold', 0.2)
+        obs_type = "low" if new_h < jump_threshold else "high"
+        self.obstacle_positions[0] = [blocker_x, blocker_y, new_h, obs_type]
+        self.obstacle_entities[0]  = self.curriculum_entities[new_level]
+        self.jump_curriculum_height = new_h
+        self.curriculum_level       = new_level
+        self.jump_success_count     = 0
+
+        print(f"🎓 Curriculum advanced: {old_h*100:.1f}cm → {new_h*100:.1f}cm "
+              f"(level {new_level}/{len(self.curriculum_heights)-1})")
 
 
     def _reposition_dynamic_obstacles(self):
@@ -1110,6 +1387,43 @@ class Go2NavigationEnv(Go2BaseEnv):
         # Dynamic obstacle repositioning during training
         if self.dynamic_obstacles:
             self._reposition_dynamic_obstacles()
+
+        # Height-curriculum success detection with strict anti-bypass criteria.
+        if (self.dynamic_obstacles
+                and hasattr(self, 'curriculum_heights')
+                and len(self.obstacle_positions) >= 1):
+            blocker_x = self.obstacle_positions[0][0]
+            blocker_y = self.obstacle_positions[0][1]
+            blocker_h = getattr(self, 'jump_curriculum_height', float(self.obstacle_positions[0][2]))
+
+            width = self.env_cfg.get('dynamic_obstacle_width', 0.4)
+            half_width = width * 0.5
+            x_margin = self.env_cfg.get('jump_success_x_margin', 0.25)
+            y_tol = self.env_cfg.get('jump_centerline_tolerance', 0.35)
+            clearance_factor = self.env_cfg.get('jump_success_clearance_factor', 0.35)
+            z_margin = self.env_cfg.get('jump_success_height_margin', 0.03)
+
+            robot_x = self.base_pos[:, 0]
+            robot_y = self.base_pos[:, 1]
+            robot_z = self.base_pos[:, 2]
+
+            near_blocker = torch.abs(robot_x - blocker_x) < (half_width + 0.35)
+            centered = torch.abs(robot_y - blocker_y) <= y_tol
+
+            # Arm success if the robot gets airborne above a minimum clearance while near blocker.
+            min_jump_z = 0.42 + blocker_h * clearance_factor + z_margin
+            airborne_near_blocker = near_blocker & centered & (robot_z > min_jump_z)
+            self.jump_success_armed |= airborne_near_blocker
+
+            crossed = robot_x > (blocker_x + half_width + x_margin)
+            valid_success = crossed & centered & self.jump_success_armed & (~self.jump_success_counted)
+
+            successful_crossings = int(valid_success.sum().item())
+            if successful_crossings > 0:
+                self.jump_success_counted |= valid_success
+                self.jump_success_count += successful_crossings
+                if self.jump_success_count >= self.jump_success_threshold:
+                    self._advance_curriculum()
 
         self._compute_rewards()
 
