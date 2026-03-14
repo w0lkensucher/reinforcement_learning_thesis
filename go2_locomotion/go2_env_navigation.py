@@ -3,6 +3,9 @@ import genesis as gs
 import numpy as np
 from go2_env_base import Go2BaseEnv
 
+# Shared goal radius for all goal-reaching checks (reward and termination)
+GOAL_TERMINATION_RADIUS = 0.7  # meters
+
 class Go2NavigationEnv(Go2BaseEnv):
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, wind_force=False, uneven_terrain=False, show_viewer=False, dynamic_obstacles=False):
         super().__init__(num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg)
@@ -1084,19 +1087,31 @@ class Go2NavigationEnv(Go2BaseEnv):
         robot_pos = self.base_pos[:, :2]
         distance = torch.norm(robot_pos - target_pos, dim=1)
 
-        # Zero out reward within a certain radius (e.g., within 0.9m of goal)
-        zero_radius = 0.9
-        mask = distance >= zero_radius
-        
-        # Two-component reward: exponential for close range + linear for long range
-        # Linear component provides gradient from far away: 1.0 at 0m, 0.0 at 10m
-        linear_reward = torch.clamp(1.0 - distance / 10.0, 0.0, 1.0)
-        # Sharper exponential - stronger pull in final 1-2m approach
-        exp_reward = torch.exp(-distance / 1.0)
-        
-        # Combine: 0.3 weight to linear (long-range) + 0.7 weight to exponential (short-range)
-        reward = 0.3 * linear_reward + 0.7 * exp_reward
-        reward = reward * mask.float()  # Zero out reward within zero_radius
+        # Share termination radius to keep all goal checks aligned
+        zero_radius = GOAL_TERMINATION_RADIUS
+
+        # Long-range pull so far states still get directionally useful signal.
+        linear_reward = torch.clamp(1.0 - distance / 12.0, 0.0, 1.0)
+
+        # Mid-range pull around 1-3m.
+        exp_reward = torch.exp(-distance / 1.1)
+
+        # Precision shaping in the final approach window (0.7m..2.0m).
+        # Cubic ramp makes the reward much more sensitive near the goal boundary.
+        precision_window = 2.0
+        precision_progress = torch.clamp(
+            (precision_window - distance) / max(precision_window - zero_radius, 1e-6),
+            0.0,
+            1.0,
+        )
+        precision_reward = precision_progress * precision_progress * precision_progress
+
+        reward = 0.2 * linear_reward + 0.35 * exp_reward + 0.45 * precision_reward
+
+        # Smooth edge at zero_radius to avoid a hard discontinuity in the signal.
+        edge_width = 0.08
+        edge_taper = torch.clamp((distance - zero_radius) / edge_width, 0.0, 1.0)
+        reward = reward * edge_taper
         return reward
 
 
@@ -1110,12 +1125,9 @@ class Go2NavigationEnv(Go2BaseEnv):
         robot_pos = self.base_pos[:, :2]
         distance = torch.norm(robot_pos - target_pos, dim=1)
         
-        # Graduated success reward: partial credit for getting close
-        # 1.0 within 0.5m, 0.5 within 1.0m, 0.2 within 1.5m
+        # Award reaching the goal at shared termination radius
         reward = torch.zeros_like(distance)
-        # reward = torch.where(distance < 2.0, 0.2, reward)
-        # reward = torch.where(distance < 1.5, 0.5, reward)
-        reward = torch.where(distance < 0.9, 1.0, reward)
+        reward = torch.where(distance < GOAL_TERMINATION_RADIUS, 1.0, reward)
         return reward
 
 
@@ -1129,8 +1141,8 @@ class Go2NavigationEnv(Go2BaseEnv):
         robot_pos = self.base_pos[:, :2]
         current_distance = torch.norm(robot_pos - target_pos, dim=1)
 
-        # Zero out reward within a certain radius (e.g., within 0.9m of goal)
-        zero_radius = 0.9
+        # Zero out reward within shared termination radius (avoid duplicate reward near goal)
+        zero_radius = GOAL_TERMINATION_RADIUS
         mask = current_distance >= zero_radius
         
         # Initialize tracking on first call
@@ -1165,11 +1177,11 @@ class Go2NavigationEnv(Go2BaseEnv):
         if not self.dynamic_obstacles or len(self.obstacle_positions) != 2:
             return torch.zeros(self.num_envs, device=self.device)
         
-        # Mask for environments that terminated by reaching the goal
-        goal_dist_norm = self.obs_buf[:, -4]
-        termination_radius = 0.9  # Match your termination radius
-        goal_norm_thresh = termination_radius / 15.0
-        goal_reached = goal_dist_norm < goal_norm_thresh
+        # Compute fresh goal distance instead of reading stale obs_buf
+        target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
+        robot_pos = self.base_pos[:, :2]
+        distance = torch.norm(robot_pos - target_pos, dim=1)
+        goal_reached = distance < GOAL_TERMINATION_RADIUS
 
         # Calculate completion bonus: higher for fewer steps
         max_steps = self.max_episode_length
@@ -1185,20 +1197,18 @@ class Go2NavigationEnv(Go2BaseEnv):
         # Call base class termination checks (pitch, roll, height, time)
         super()._check_termination()
 
-        # obs_buf indices: ... goal_dist_norm (idx -4), blocker_dist_norm (idx -1)
-        goal_dist_norm = self.obs_buf[:, -4]
-        blocker_dist_norm = self.obs_buf[:, -1]
-
-        # Terminate if robot walks significantly past the goal (still use X comparison for overshoot)
-        if self.dynamic_obstacles and len(self.obstacle_positions) == 2:        # Terminate when normalized goal distance is below threshold
-            # goal_dist_norm = distance_to_goal / 15.0 (see obs_buf construction)
-            # Use normalized distances from obs_buf for termination
-            termination_radius = 0.7  # meters
-            goal_norm_thresh = termination_radius / 15.0
-            goal_reached = goal_dist_norm < goal_norm_thresh
-            self.reset_buf |= goal_reached
+        # Terminate if robot reaches goal or walks significantly past it
+        if self.dynamic_obstacles and len(self.obstacle_positions) == 2:
+            # Compute fresh goal distance (do NOT read stale obs_buf which is from previous step)
             target_pos = torch.tensor(self.obstacle_positions[1][:2], device=self.device, dtype=torch.float32)
             robot_pos = self.base_pos[:, :2]
+            distance = torch.norm(robot_pos - target_pos, dim=1)
+            
+            # Terminate when goal is reached using shared termination radius
+            goal_reached = distance < GOAL_TERMINATION_RADIUS
+            self.reset_buf |= goal_reached
+            
+            # Also terminate for significant overshoot (walked well past goal)
             overshoot_threshold = 3.0
             overshot = robot_pos[:, 0] > (target_pos[0] + overshoot_threshold)
             self.reset_buf |= overshot

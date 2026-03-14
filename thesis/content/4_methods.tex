@@ -1,0 +1,47 @@
+\chapter{Methodik}\label{ch:methods}
+
+In diesem Kapitel wird die methodische Vorgehensweise zur Untersuchung der Forschungsfrage vorgestellt. Ziel ist es, die Leistungsfähigkeit des entwickelten Reinforcement-Learning-Ansatzes für die Navigation eines Go2-Roboters in simulierten Umgebungen systematisch zu evaluieren. Dazu werden verschiedene Trainingsläufe mit unterschiedlichen Zufallsinitialisierungen (Seeds) durchgeführt, um die Robustheit und Reproduzierbarkeit der Ergebnisse zu gewährleisten. Zusätzlich wird ein Training mit reduzierter Modellgröße bzw. geringerer Komplexität durchgeführt, um den Einfluss der Modellkapazität auf die Lernleistung zu untersuchen.
+
+Die folgenden Abschnitte beschreiben zunächst die verwendete Simulationsumgebung und das Robotermodell, anschließend den eingesetzten Lernalgorithmus sowie die Gestaltung der Belohnungsfunktion und des Curriculums. Abschließend werden der konkrete Versuchsaufbau und die verwendeten Evaluationsmetriken erläutert.
+\section{Die Simulationsumgebung und das Robotermodell}
+Für die Durchführung der Experimente wird die Simulationsumgebung \textbf{Genesis} verwendet, eine auf physikalisch basierter Modellierung und effizienter Parallelisierung ausgelegte Plattform für robotische Anwendungen \cite{authorsGenesisGenerativeUniversal2024}. Genesis ermöglicht die realitätsnahe Nachbildung komplexer Umgebungen und unterstützt die Integration verschiedener Robotermodelle sowie die Simulation dynamischer Hindernisse. Als Roboterplattform kommt der \textbf{Go2} von Unitree Robotics \cite{unitreeGo2Unitree2023} zum Einsatz, ein vierbeiniger Laufroboter, der sich durch hohe Beweglichkeit und Stabilität auszeichnet. Das digitale Modell des Go2 bildet die kinematischen und dynamischen Eigenschaften des realen Roboters detailliert ab und erlaubt so eine praxisnahe Evaluierung der entwickelten Steuerungsalgorithmen. Aufgrund der im Genesis-Framework bereits vorhandenen Modelle des Go2 Unitree fiel die Entscheidung auf dieses Framework.
+
+In der Simulation erhält der Go2-Roboter Beobachtungen über seine Gelenkpositionen und -geschwindigkeiten, die relative Position des Ziels sowie des Hindernisses und die Kontakte an den Füßen. Die Aktuierung erfolgt über 12 Motoren, die jeweils die Hüft-, Oberschenkel- und Unterschenkelgelenke der vier Beine steuern \cite{unitreeGo2Unitree2023}. Die Positionsregelung der Gelenke wird durch individuell einstellbare PD-Regler (Proportional- und Dämpfungsfaktor) realisiert. Die Simulationsumgebung arbeitet mit einer Schrittweite von $0,02$s, was einer Steuerfrequenz von 50Hz entspricht. Auf Domain Randomization wurde verzichtet, da die Experimente gezielt auf die Navigation mit einem einzelnen Hindernis und einem Ziel ausgerichtet sind.
+
+Die Implementierung der Simulationsumgebung basiert auf einer Beispielumgebung für den Go2 Unitree des Genesis-Frameworks \cite{authorsGenesisGenerativeUniversal2024}, welche im Rahmen dieser Arbeit umfassend angepasst und erweitert wurde. Insbesondere wurden Beobachtungs- und Aktionsraum sowie die Belohnungsstruktur an die jeweiligen experimentellen Anforderungen angepasst. Diese Modifikationen ermöglichen eine gezielte Untersuchung der Lernleistung und Robustheit des entwickelten Steuerungsansatzes unter kontrollierten Bedingungen.
+\section{Der Reinforcement-Learning-Algorithmus}
+Für das Training der Steuerungpolicies wird der PPO Algorithmus eingesetzt, welcher bereits in \autoref{PPO} erläutert wurde. Die Implementierung gleicht dem gegebenen Beispiel des Genesis-Frameworks \cite{authorsGenesisGenerativeUniversal2024}, dessen Hyperparameterauswahl sich ebenfalls daran orientieren. Die Wahl von PPO erfolgte aufgrund seiner Robustheit und weiten Verbreitung im Bereich er kontinuierlichen Steuerungsaufgaben.
+\section{Belohnungsfunktionen} \label{reward_functions}
+Die Gestaltung der Belohnungsfunktionen spielt eine zentrale Rolle für den Lernerfolg im Reinforcement Learning. In dieser Arbeit wurden die Belohnungsfunktionen jeweils spezifisch an die Anforderungen der unterschiedlichen Aufgabenstellungen angepasst, um ein zielgerichtetes und stabiles Lernverhalten zu fördern.
+
+Für die Navigationsaufgabe wurde die Belohnung so gestaltet, dass das Erreichen des Ziels maximiert und gleichzeitig unerwünschtes Verhalten, wie Kollisionen mit Hindernissen oder ineffiziente Bewegungen, minimiert wird. Die Belohnungsfunktion setzt sich aus mehreren Komponenten zusammen:
+\begin{itemize}
+	\item \textbf{Zielannäherung:} Für die Verringerung der Distanz zum Ziel in jedem Zeitschritt wird eine positive Belohnung vergeben.
+	\item \textbf{Zielerreichung:} Das Erreichen des Ziels wird mit einer hohen, einmaligen Belohnung verstärkt.
+	\item \textbf{Kollisionen:} Kollisionen mit Hindernissen oder das Verlassen des erlaubten Bereichs werden mit einer negativen Belohnung bestraft.
+	\item \textbf{Energieeffizienz:} Übermäßige Gelenkbewegungen oder hohe Motorströme werden durch einen Strafterm für Energieverbrauch sanktioniert.
+	\item \textbf{Stabilität:} Instabile Körperhaltungen oder Stürze führen zu einer zusätzlichen negativen Belohnung.
+\end{itemize}
+Für die Interaktionsumgebung (z.B. Streicheln) wurde die Belohnungsfunktion so gestaltet, dass gezielt die erfolgreiche Kontaktaufnahme und das Halten des Kontakts mit dem Zielobjekt (z.B. einer menschlichen Hand) belohnt werden. Hierzu zählen:
+\begin{itemize}
+	\item \textbf{Kontaktaufnahme:} Das erstmalige Herstellen eines Kontakts mit dem Zielobjekt wird positiv verstärkt.
+	\item \textbf{Kontaktdauer:} Das Halten des Kontakts über mehrere Zeitschritte wird mit einer kontinuierlichen Belohnung versehen.
+	\item \textbf{Sanftheit:} Zu hohe Kontaktkräfte werden durch einen Strafterm sanktioniert, um ein sanftes Verhalten zu fördern.
+\end{itemize}
+
+Die Gewichtung der einzelnen Komponenten wurde empirisch bestimmt und im Verlauf der Experimente ggf. angepasst, um ein möglichst natürliches und robustes Verhalten des Roboters zu erzielen. Die genaue mathematische Formulierung der Belohnungsfunktionen und dessen Implementierung in Python ist in ??? und \autoref{reward_function_implementation} dokumentiert. % TODO Referenz ergänzen
+
+\section{Die Trainingsstrategie}
+Um den Lernprozess des Roboters effizienter und stabiler zu gestalten, wurde für die Navigationsaufgabe ein Curriculum-Learning-Ansatz implementiert. Dabei werden die Trainingsumgebungen und Aufgabenstellungen schrittweise in ihrer Komplexität gesteigert.
+Die verschiedenen Stufen sind aufeinander aufgebaut:
+\begin{itemize}
+	\item \textbf{Stehen:} Als Grundlage wird zuerst Stehen trainiert.
+	\item \textbf{Laufen:} Laufen wird nach dem Stehen trainiert und ist bildet die Grundlage für die weiteren Stufen.
+	\item \textbf{Navigation:} Die Navigation mit einem Hindernis und einem Ziel wird in dieser Stufe trainiert.
+	\item \textbf{Springen:} Auf Grundlage vom Laufen wird das Springen trainiert.
+\end{itemize} 
+Jede Curriculum-Stufe ist so gestaltet, dass sie auf den in der vorherigen Stufe erworbenen Fähigkeiten aufbaut. Der Übergang zur nächsten Stufe erfolgt, sobald der Roboter in der aktuellen Stufe eine definierte Erfolgsrate erreicht, und wird manuell durchgeführt. Durch dieses stufenweise Vorgehen wird eine bessere Generalisierung und Robustheit des gelernten Verhaltens ermöglicht. 
+
+Die Gewichtung der Belohnungen in den einzelnen Stufen ist in ??? dokumentiert.
+
+\section{Versuchsaufbau und Evaluationsmetrik}

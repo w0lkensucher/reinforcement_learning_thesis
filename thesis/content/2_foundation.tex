@@ -1,5 +1,4 @@
-\chapter{Theoretische Grundlagen}\label{ch:theoretical_basics}
-% TODO: Arbeit von francois-lavet und mnih, sutton barto, ppo, 
+\chapter{Theoretische Grundlagen}\label{ch:theoretical_foundation} 
 Die Entwicklung robuster Bewegungsstrategien für vierbeinige Roboter erfordert ein Zusammenspiel aus mechanischen Grundlagen der Lokomotion und modernen Lernverfahren \cite{hwangboLearningAgileDynamic2019, hutterANYmalHighlyMobile2016}. Quadrupede Lokomotion beschreibt die koordinierte Bewegung eines Roboters mit vier Beinen, bei der Stabilität, Gangmuster und die Interaktion mit dem Untergrund eine zentrale Rolle spielen \cite{hwangboLearningAgileDynamic2019, hutterANYmalHighlyMobile2016}. Reinforcement Learning ermöglicht dafür das autonome Erlernen von Policies durch Interaktion mit einer Umgebung, wobei Belohnungssignale als Feedback dienen \cite{silverRewardEnough2021, zhangORSOAcceleratingReward2025, Kober_IJRR_2013}. Deep Reinforcement Learning erweitert diesen Ansatz durch den Einsatz tiefer neuronaler Netze zur Approximation von Policies oder Wertfunktionen und erlaubt damit die Verarbeitung hochdimensionaler Zustandsräume sowie komplexer Sensordaten \cite{rudin2022learningwalkminutesusing, tangDeepReinforcementLearning2024, cobbe2019quantifyinggeneralizationreinforcementlearning}. Im Folgenden werden daher zunächst die grundlegenden Konzepte der quadrupeden Lokomotion sowie die zentralen Prinzipien des Reinforcement Learning und Deep Reinforcement Learning erläutert, welche die Grundlage für die in dieser Arbeit verwendeten Methoden bilden.
 \section{Deep Learning}
 \label{dl_explain}
@@ -42,7 +41,7 @@ Der Agent verfolgt das Ziel, eine Policy $\pi$ zu erlernen, die jedem Zustand ei
 \begin{equation}
 	G_t = \sum_{k=0}^{\infty}\gamma^k R_{t+k+1}
 \end{equation}
-\subsection{Wertfunktionen und die Bellman-Gleichungen} % TODO, erweitern: Notizen sind in NotebookLM
+\subsection{Wertfunktionen und die Bellman-Gleichungen}
 Sutton und Barto benennen in \cite{sutton2018reinforcement} Wertfunktionen als zentrales Element von Reinforcement Learning, da sie dazu dienen, den langfristigen Nutzen von Zuständen oder Zustands-Aktions-Paaren mathematisch zu quantifizieren. Die State-Value Funktion $V^{\pi}(s)$ beschreibt dabei den erwarteten Return, wenn ein Agent in einem Zustand s startet und darauffolgend einer Policy $\pi$ folgt. Darüber hinaus bewertet die Action-Value Function $Q^{\pi}(s, a)$ dem Wert der Ausführung einer spezifischen Aktion $a$ in einem Zustand $s$, wobei danach ebenfalls die Policy $\pi$ befolgt wird. \newline
 Das übergeordnete Ziel ist dabei, beschrieben von Sutton und Barto in \cite{sutton2018reinforcement}, das Erlernen einer optimalen Wertfunktion $V*$ oder $Q*$, welche den erreichbaren Return über alle möglichen Policies hinweg repräsentiert.
 
@@ -70,9 +69,8 @@ Die Synergie der Eigenschaften von Reinforcement Learning und von Deep Learning,
 \subsection{Actor-Critic Methoden}
 Ein wesentlicher Bestandteil dieser Architektur ist das Lernsignal, das der Critic für die Aktualisierung der Policy liefert \cite{sutton2018reinforcement}. Sutton und Barto \cite{sutton2018reinforcement} sowie François-Lavet et al.  \cite{francois-lavetIntroductionDeepReinforcement2018} beschreiben, dass hierzu der Critic den erwarteten Return eines Zustands schätzt und damit die Berechnung einer Advantage-Funktion ermöglicht, welche beschreibt, ob eine ausgeführte Aktion besser oder schlechter als erwartet war. Diese Bewertung dient anschließend als Grundlage für die Aktualisierung der Policy des Actors. Durch dieses Zusammenspiel können Actor-Critic-Methoden stabilere und effizientere Lernprozesse erreichen als reine Policy-Gradient-Verfahren.
 
-
-% TODO mathematische Grundlagen von DRL?
-\subsection{Proximal Policy Optimization (PPO)} \label{PPO} % TODO fortführen, NotebookLM hat Notiz
+Auf diesem strukturellem Fundament baut der Proximal Policy Optimization Algorithmus auf, welcher in diversen Arbeiten als 'Actor-Critic-Stil' geführt wird \cite{schulmanProximalPolicyOptimization2017, jinResilientLeggedLocal2023}.
+\subsection{Proximal Policy Optimization (PPO)} \label{PPO}
 Schulman et al. stellen in \cite{schulmanProximalPolicyOptimization2017} Proximal Policy Optimization oder PPO vor, welche eine Sammlung von Policy-Gradient-Methoden in Deep Reinforcement Learning ist und darauf abzielt, die Stabilität und Effizienz des Lernprozesses zu maximieren. \newline
 Im Gegensatz zu klassischen Policy-Gradient-Verfahren zeichnet sich PPO dadurch aus, dass Aktualisierungen der Policy begrenzt werden, sodass diese nicht stark von der vorherigen Policy abweichen. Dadurch werden instabile Lernschritte vermieden, die bei großen Policy-Updates in klassischen Verfahren auftreten können \cite{schulmanProximalPolicyOptimization2017}.
 \subsubsection{Mathematisches Konzept und Clipping-Mechanismus}
@@ -83,7 +81,7 @@ Der Kern von PPO ist ein spezielles Surrogate Objective, welches die Aktualisier
 Große Schwankungen werden bei PPO mittels Clipped Surrogate Objective $L^{CLIP}$ verhindert, welches die Ratio innerhalb eines Intervalls um 1, wodurch Anreize für zu große Änderungen der Policy entfernt werden:
 \begin{equation}
 	L^{CLIP}(\theta) = \hat{\mathbb{E}_t}[\text{min}(r_t(\theta)\hat{A}_t), \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t]
-\end{equation} % TODO A_t kann nach oben zu Actor-Critic verschoben werden
+\end{equation}
 Dabei repräsentiert $\hat{A}_t$ die Advantage-Funktion, welche die Steigerung der Aktion im Vergleich zum Durchschnitt aller Aktionen im spezifischen Zustand bewertet, während $\epsilon$ mit der Ratio im Clipping zusammenhängt und typischerweise $0,2$ beträgt \cite{schulmanProximalPolicyOptimization2017}. 
 \subsubsection{Bedeutung für die Robotik}
 In der Robotik hat sich PPO als Standardalgorithmus etabliert, was vor allem an seiner Robustheit gegenüber Hyperparametern und der Fähigkeit, effektiv in hochdimensionalen, kontinuierlichen Aktionsräumen zu lernen, liegt \cite{tang, schwarke2025rslrllearninglibraryrobotics}. Außerdem können tausende Agenten durch PPO in parallelen Simulationen komplexe Bewegungsabläufe in kurzer Zeit lernen, dessen Ergebnisse durch die Stabilität des Clipping-Mechanismus zuverlässig auf reale physikalische Systeme transferiert werden können \cite{rudin2022learningwalkminutesusing, schwarke2025rslrllearninglibraryrobotics, tangDeepReinforcementLearning2024}.
@@ -158,8 +156,5 @@ dar, wobei $\theta$ der Rotationswinkel um die Einheitsachse $n = (n_x, n_y, n_z
 \end{aligned}
 \end{equation}
 % TODO Bild einfügen: kartesisch vs sphärisch vs euler
-\subsection{Mathematische Problemformulierung mittels MDP}
-
-% TODO nach MDP in RL Grundlagen einfügen
 \subsection{Dynamik und Kontaktmodellierung}
 Die Simulation der quadrupeden Robotern basiert auf einem dynamischen Modell mit Berücksichtigung von Kontaktkräften zwischen Beinen und Untergrund, dessen Implementierung vollständig vom Framework übernommen wird \cite{authorsGenesisGenerativeUniversal2024}.

@@ -1,0 +1,133 @@
+\chapter{Mathematische Formulierung der Belohnungsfunktion}\label{reward_function_maths}
+
+% TODO korrigieren
+
+Navigation-Umgebung
+Die Gesamtbelohnung 
+r
+t
+r 
+t
+​
+setzt sich aus mehreren Teilbelohnungen zusammen:
+
+[
+r_t = w_1 \cdot r_{\text{forward}} + w_2 \cdot r_{\text{keep_moving}} + w_3 \cdot r_{\text{blocker_clearance}} + w_4 \cdot r_{\text{centerline}} + w_5 \cdot r_{\text{height}} + w_6 \cdot r_{\text{symmetry}}
+]
+
+Beispielhafte Teilbelohnungen:
+
+Vorwärtsbewegung:
+[
+r_{\text{forward}} = \text{clamp}(v_{\text{forward}}, 0, 2.0) + \begin{cases}
+	-1.0, & v_{\text{forward}} < 0.1 \
+	0, & \text{sonst}
+\end{cases}
+]
+(
+v
+forward
+v 
+forward
+​
+= Vorwärtsgeschwindigkeit)
+
+Bewegung allgemein:
+[
+r_{\text{keep_moving}} = \text{clamp}(|v_{xy}|, 0, 2.0) + \begin{cases}
+	-1.0, & |v_{xy}| < 0.1 \
+	0, & \text{sonst}
+\end{cases}
+]
+(
+∥
+v
+x
+y
+∥
+∥v 
+xy
+​
+∥ = Geschwindigkeit in XY-Ebene)
+
+Blocker Clearance:
+[
+r_{\text{blocker_clearance}} = \text{clamp}(x_{\text{robot}} - x_{\text{blocker}}, 0, 2.0)
+]
+
+Centerline Penalty:
+[
+r_{\text{centerline}} = \text{lateral_overrun} \cdot \text{proximity} \cdot \text{before_cross}
+]
+(siehe Code für Details zu den Faktoren)
+
+Höhenkontrolle:
+[
+r_{\text{height}} = \exp\left(-10 \cdot \max(|h_{\text{base}} - h_{\text{target}}| - \text{tolerance}, 0)\right)
+]
+
+Symmetrie:
+[
+r_{\text{symmetry}} = -\left(\text{hip_sym} + \text{thigh_sym} + \text{calf_sym}\right)
+]
+(Summe der absoluten Differenzen der Gelenkwinkel zwischen linker und rechter Seite)
+
+Petting-/Interaktionsumgebung
+Die Gesamtbelohnung 
+r
+t
+r 
+t
+​
+setzt sich aus folgenden Komponenten zusammen:
+
+[
+r_t = w_1 \cdot r_{\text{petting_response}} + w_2 \cdot r_{\text{gesture_during_touch}} + w_3 \cdot r_{\text{gesture_movement}} + w_4 \cdot r_{\text{no_sitting}} + w_5 \cdot r_{\text{stability}} + w_6 \cdot r_{\text{flexible_height}} + w_7 \cdot r_{\text{upright}}
+]
+
+Beispielhafte Teilbelohnungen:
+
+Petting Response:
+[
+r_{\text{petting_response}} = \begin{cases}
+	\text{progress}, & \text{wenn Geste aktiv} \
+	0, & \text{sonst}
+\end{cases}
+]
+(
+progress
+progress = Fortschritt der Geste)
+
+Geste während Berührung:
+[
+r_{\text{gesture_during_touch}} = \begin{cases}
+	\text{progress}, & \text{wenn Hand auf Roboter und Geste aktiv} \
+	0, & \text{sonst}
+\end{cases}
+]
+
+Gelenkbewegung während Geste:
+[
+r_{\text{gesture_movement}} = \text{gesture_active} \cdot \text{standing_multiplier} \cdot \sum |\dot{q}{\text{gesture}}|
+]
+($\dot{q}{\text{gesture}}$ = Gelenkgeschwindigkeiten der Gesten-Gelenke)
+
+Sitzstrafe:
+[
+r_{\text{no_sitting}} = 1.0 \cdot (\text{sitting} \lor \text{base_too_low})
+]
+
+Stabilität:
+[
+r_{\text{stability}} = \exp\left(-(|\omega_{\text{base}}| + |h_{\text{base}} - h_{\text{target}}| \cdot 5)\right) \cdot \text{gesture_active}
+]
+
+Flexible Höhe:
+[
+r_{\text{flexible_height}} = \exp\left(-10 \cdot \max(|h_{\text{base}} - h_{\text{target}}| - 0.02, 0)\right)
+]
+
+Aufrecht stehen:
+[
+r_{\text{upright}} = \exp\left(-5 \cdot (|\text{roll}| + |\text{pitch}|)\right)
+]
