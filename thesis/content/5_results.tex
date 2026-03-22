@@ -1,0 +1,116 @@
+\chapter{Experimentelle Ergebnisse}\label{ch:results}
+
+In diesem Kapitel werden die Ergebnisse der durchgeführten Trainings- und Evaluationsläufe präsentiert und analysiert. Ziel ist es, die Leistungsfähigkeit der trainierten Policies im Hinblick auf Robustheit, Lernfortschritt und Zielerreichung zu bewerten. Dazu werden die wichtigsten Metriken wie durchschnittlicher Return, Erfolgsrate und Kollisionen über mehrere Trainingsläufe mit unterschiedlichen Seeds ausgewertet und sowohl quantitativ als auch qualitativ dargestellt. Die nachfolgenden Abschnitte geben einen Überblick über die erzielten Resultate und diskutieren das beobachtete Verhalten des Roboters in den verschiedenen Curriculum-Stufen.
+
+Für die Bewertung der in der Petting-Umgebung trainierten Policies wurde primär die mittlere Episodenlänge als quantitative Metrik herangezogen. Diese gibt Aufschluss darüber, wie lange der Roboter in der Lage ist, die gewünschte Interaktion – beispielsweise das Ausführen einer Streichelgeste – stabil aufrechtzuerhalten, bevor eine Episode aufgrund von Instabilität oder Abbruchbedingungen endet. Ergänzend erfolgte eine visuelle Auswertung anhand von aufgezeichneten Episoden, um das qualitative Verhalten des Roboters und die Natürlichkeit der ausgeführten Gesten zu beurteilen. Durch die Kombination aus quantitativer und visueller Analyse konnte die Leistungsfähigkeit der Policy in Bezug auf Interaktionsdauer und Bewegungsqualität umfassend bewertet werden.
+
+Bei der Navigationsumgebung in den ersten beiden Stufen des Curriculum Learnings lag der Fokus der Auswertung insbesondere auf dem durchschnittlichen Return, der mittleren Episodenlänge sowie der Entropie der Policy. Diese Metriken geben Aufschluss über den allgemeinen Lernfortschritt, die Stabilität des Verhaltens und das Maß an Exploration während des Trainings. Ergänzend wurden spezifische Stabilitätsrewards betrachtet, um sicherzustellen, dass der Roboter in der Lage ist, zuverlässig zu stehen und zu laufen. In den höheren Stufen, insbesondere in Stufe 3 und 4 verschiebt sich der Schwerpunkt der Analyse auf die Anzahl der Kollisionen mit Hindernissen bzw. die Anzahl der erfolgreichen Sprünge bis zum Erreichen der nächsten Curriculum-Stufe. Diese Metriken sind entscheidend, um die Leistungsfähigkeit des Roboters im Umgang mit komplexeren Navigationsaufgaben und dynamischen Hindernissen zu bewerten. Außerdem wurde für jede Stufe die gelernten Policies an einer gewählten Checkpoints visuell ausgewertet, um sicherzustellen, dass das gewünschte Trainingsziel wirklich erreicht wurde.
+
+\section{Interaktionsumgebung}
+
+\section{Navigationsumgebung}
+
+\subsection{Stehen: Erste Stufe im Curriculum Learning}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.5\textwidth]{figures/stand_env.png}
+	\caption{Navigationsumgebung für Training von Stehen mit Seed 42}
+	\label{fig:stand_env}
+\end{figure}
+
+In der ersten Stufe des Curriculum Learnings bestand die Aufgabe des Roboters darin, eine stabile stehende Position einzunehmen und über die gesamte Episodenlänge aufrechtzuerhalten. Die Auswertung der Trainingsläufe zeigt, dass der der Reward für die Einhaltung der Höhe in \autoref{fig:stand_height} und der durchschnittliche Return in \autoref{fig:stand_rewards} bereits nach etwa 50 Iterationen ein hohes Niveau erreicht, was auf ein schnelles Erlernen der Standstabilität hindeutet. Auch die durchschnittliche Episodenlänge in \autoref{fig:stand_mean_ep_length} steigt rasch an und nähert sich dem maximal möglichen Wert, da der Roboter zunehmend seltener durch Instabilität oder Abbruchbedingungen vorzeitig scheitert.
+
+Die Entropie der Policy, welche in \autoref{fig:stand_entropy} zu sehen ist, nimmt im Verlauf des Trainings kontinuierlich ab. Zusätzlich bestätigen die visuellen Auswertungen der Episoden, dass der Roboter nach Abschluss der ersten Stufe in der Lage ist, sicher und stabil zu stehen. Unterschiede zwischen den einzelnen Seeds waren nur geringfügig ausgeprägt, sodass exemplarisch auf den Ergebnissen des Seeds 42 bei Schritt 50 weitergearbeitet wurde.
+
+\begin{figure}[H] % htbp
+	\centering
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/stand_mean_episode_length_across_runs.png}
+		\caption{Durchschnittliche Episodenlänge bei Stehtraining}
+		\label{fig:stand_mean_ep_length}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/stand_entropy_across_runs.png}
+		\caption{Entropie bei Stehtraining}
+		\label{fig:stand_entropy}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/stand_rew_reward_across_runs.png}
+		\caption{Return bzw. Rewards bei Stehtraining}
+		\label{fig:stand_rewards}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/stand_rew_height_across_runs.png}
+		\caption{Reward 'height' bei Stehtrainig}
+		\label{fig:stand_height}
+	\end{subfigure}
+	\caption{Die wichtigsten Metriken für die Bewertung von Stehen über verschiedene Seeds}
+	\label{fig:stand_metrics}
+\end{figure}
+
+\subsection{Laufen: Zweite Stufe im Curriculum Learning}
+\begin{figure}[htbp]
+	\centering
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/walk_env_1.png}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/walk_env_2.png}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/walk_env_3.png}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/walk_env_4.png}
+	\end{subfigure}
+	\caption{Navigationsumgebung für Training von Laufen}
+	\label{fig:walk_env}
+\end{figure}
+
+Auf Grundlage der ersten Stufe besteht die Aufgabe des Roboters in der zweiten Stufe darin, eine vorgegebene Gehgeschwindigkeit stabil zu verfolgen und dabei Laufen zu lernen. Der durchschnittliche Return für das Verfolgen der linearen Geschwindigkeit in \autoref{fig:walk_tracking_lin_vel} fängt an, bei 400 Iterationen deutlich zu steigen, bis es sich bei 600 Iterationen stabilisiert. Der gesamte durchschnittliche Return spiegelt dieses Verhalten ebenfalls wieder. \newline
+Die durchschnittliche Episodenlänge in \autoref{fig:walk_mean_length} nimmt im Verlauf des Trainings ähnlich wie die Returns bei Iteration 300 über alle Seeds hinweg zu und stabilisert sich ebenfalls bei rund 600 Iterationen. Zusammen mit der Entropie, welche sich bei 600 Iterationen stabilisiert, deutet dies darauf hin, dass die Roboter die Gehbewegung erlernt, und die Policy eine geringe Variabilität aufweist.
+
+Ein Vergleich der Trainingsergebnisse zwischen den Seeds zeigt, dass die Lernkurven in allen Fällen einen ähnlichen Verlauf aufweisen und ähnliche Endleistungen erzielen, welches auch durch visuelle Auswertungen bestätigt wird. In den folgenden Stufen wurden mit den Trainingsergebnissen aus Seed 1 bei Schritt 1049 weitergearbeitet.
+\begin{figure}[htbp]
+	\centering
+	\begin{subfigure}[b]{0.5\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/walk_mean_episode_length_across_runs.png}
+		\caption{Durchschnittliche Episodenlänge bei Training mit unterschiedlichen Seeds}
+		\label{fig:walk_mean_length}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/walk_entropy_across_runs.png}
+		\caption{Entropie bei Training mit unterschiedlichen Seeds}
+		\label{fig:walk_entropy}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/walk_rew_reward_across_runs.png}
+		\caption{Return bzw. Rewards bei Training mit unterschiedlichen Seeds}
+		\label{fig:walk_rewards}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/walk_rew_tracking_lin_vel_across_runs.png}
+		\caption{Reward 'tracking\_lin\_vel' bei Training mit unterschiedlichen Seeds}
+		\label{fig:walk_tracking_lin_vel}
+	\end{subfigure}
+	\caption{Wichtigsten Metriken für die Bewertung des Trainings von Laufen}
+	\label{fig:walk_metrics}
+\end{figure}
+
+\subsection{Navigieren: Dritte Stufe im Curriculum Learning}
+
+\subsection{Springen: Vierte Stufe im Curriculum Learning}
+

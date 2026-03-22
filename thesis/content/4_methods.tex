@@ -14,12 +14,11 @@ Für das Training der Steuerungpolicies wird der PPO Algorithmus eingesetzt, wel
 \section{Belohnungsfunktionen} \label{reward_functions}
 Die Gestaltung der Belohnungsfunktionen spielt eine zentrale Rolle für den Lernerfolg im Reinforcement Learning. In dieser Arbeit wurden die Belohnungsfunktionen jeweils spezifisch an die Anforderungen der unterschiedlichen Aufgabenstellungen angepasst, um ein zielgerichtetes und stabiles Lernverhalten zu fördern.
 
-Für die Navigationsaufgabe wurde die Belohnung so gestaltet, dass das Erreichen des Ziels maximiert und gleichzeitig unerwünschtes Verhalten, wie Kollisionen mit Hindernissen oder ineffiziente Bewegungen, minimiert wird. Die Belohnungsfunktion setzt sich aus mehreren Komponenten zusammen:
+Für die Navigationsaufgabe wurde die Belohnung so gestaltet, dass das Erreichen des Ziels maximiert und gleichzeitig unerwünschtes Verhalten, wie Kollisionen mit Hindernissen oder ineffiziente Bewegungen, minimiert wird. Die Belohnungsfunktionen setzt sich aus mehreren Komponenten zusammen:
 \begin{itemize}
 	\item \textbf{Zielannäherung:} Für die Verringerung der Distanz zum Ziel in jedem Zeitschritt wird eine positive Belohnung vergeben.
 	\item \textbf{Zielerreichung:} Das Erreichen des Ziels wird mit einer hohen, einmaligen Belohnung verstärkt.
 	\item \textbf{Kollisionen:} Kollisionen mit Hindernissen oder das Verlassen des erlaubten Bereichs werden mit einer negativen Belohnung bestraft.
-	\item \textbf{Energieeffizienz:} Übermäßige Gelenkbewegungen oder hohe Motorströme werden durch einen Strafterm für Energieverbrauch sanktioniert.
 	\item \textbf{Stabilität:} Instabile Körperhaltungen oder Stürze führen zu einer zusätzlichen negativen Belohnung.
 \end{itemize}
 Für die Interaktionsumgebung (z.B. Streicheln) wurde die Belohnungsfunktion so gestaltet, dass gezielt die erfolgreiche Kontaktaufnahme und das Halten des Kontakts mit dem Zielobjekt (z.B. einer menschlichen Hand) belohnt werden. Hierzu zählen:
@@ -40,8 +39,13 @@ Die verschiedenen Stufen sind aufeinander aufgebaut:
 	\item \textbf{Navigation:} Die Navigation mit einem Hindernis und einem Ziel wird in dieser Stufe trainiert.
 	\item \textbf{Springen:} Auf Grundlage vom Laufen wird das Springen trainiert.
 \end{itemize} 
-Jede Curriculum-Stufe ist so gestaltet, dass sie auf den in der vorherigen Stufe erworbenen Fähigkeiten aufbaut. Der Übergang zur nächsten Stufe erfolgt, sobald der Roboter in der aktuellen Stufe eine definierte Erfolgsrate erreicht, und wird manuell durchgeführt. Durch dieses stufenweise Vorgehen wird eine bessere Generalisierung und Robustheit des gelernten Verhaltens ermöglicht. 
+Jede Curriculum-Stufe ist so gestaltet, dass sie auf den in der vorherigen Stufe erworbenen Fähigkeiten aufbaut. Der Übergang zur nächsten Stufe erfolgt, sobald der Roboter in der aktuellen Stufe eine definierte Erfolgsrate erreicht, und wird manuell durchgeführt. Durch dieses stufenweise Vorgehen wird eine bessere Generalisierung und Robustheit des gelernten Verhaltens ermöglicht. In der letzten Stufe, dem Erlernen der Sprungfähigkeit, wird zusätzlich während des Trainings die Höhe des Hindernisses stückweise erhöht nach konsistenter Bewältigung des Hindernisses.
 
 Die Gewichtung der Belohnungen in den einzelnen Stufen ist in ??? dokumentiert.
 
 \section{Versuchsaufbau und Evaluationsmetrik}
+Für die Evaluation der trainierten Policies wurden mehrere Trainingsläufe mit unterschiedlichen Zufallsinitialisierungen oder Seeds durchgeführt, um die Robustheit und Reproduzierbarkeit der Ergebnisse zu gewährleisten. Die Trainings wurden jeweils mit identischen Hyperparametern, aber verschiedenen Seeds gestartet. Nach Abschluss des Trainings erfolgte die Auswertung der Ergebnisse anhand der wichtigsten Metriken.
+
+Als Evaluationsmetrik diente primär die visuelle Auswertung der Lernkurven (z.B. durchschnittlicher Return, Erfolgsrate, Kollisionen pro Episode) über alle Seeds hinweg. Die Ergebnisse wurden als Mittelwert und Standardabweichung über die verschiedenen Seeds dargestellt, um die Varianz und Stabilität des Lernverhaltens zu beurteilen. Zusätzlich wurden ausgewählte Episoden als Video aufgezeichnet, um das qualitative Verhalten des Roboters zu veranschaulichen.
+
+Diese Vorgehensweise ermöglicht eine umfassende Bewertung der Lernleistung und der Robustheit der trainierten Policies unter realitätsnahen Bedingungen.

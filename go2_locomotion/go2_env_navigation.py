@@ -1,6 +1,8 @@
 import torch
 import genesis as gs
 import numpy as np
+import csv
+import os
 from go2_env_base import Go2BaseEnv
 
 # Shared goal radius for all goal-reaching checks (reward and termination)
@@ -37,6 +39,26 @@ class Go2NavigationEnv(Go2BaseEnv):
         # Track strict curriculum success per environment (one credit per episode).
         self.jump_success_armed = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
         self.jump_success_counted = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        
+        # Track attempts to reach next curriculum level
+        self.jump_attempts_at_level = 0
+        self.jump_attempts_per_env = torch.zeros(self.num_envs, device=self.device)  # Steps per environment
+        self.curriculum_advance_metrics = {}  # Store metrics for external logging
+        
+        # Stage 3 avoidance tracking
+        self.avoidance_goals_reached = 0
+        self.avoidance_episodes_total = 0
+        self.avoidance_collisions = 0
+        self.avoidance_avg_distance = 0.0
+        self.avoidance_episode_costs = []  # Track cost per episode
+        self.episode_had_collision = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)  # Per-env collision flag
+        
+        # CSV logging for curriculum progress
+        self.curriculum_csv_file = None
+        self.curriculum_csv_writer = None
+        self.avoidance_csv_file = None
+        self.avoidance_csv_writer = None
+        self._init_curriculum_logger()
         
         # optional camera
         if self.env_cfg.get("visualize_camera", True):
@@ -348,7 +370,104 @@ class Go2NavigationEnv(Go2BaseEnv):
         return 0.0
     
 
-    # obstacle creation
+    def _init_curriculum_logger(self):
+        """Initialize CSV loggers for curriculum advancement and stage 3 avoidance tracking"""
+        # Get log directory from env_cfg (passed from training script)
+        log_dir = self.env_cfg.get('log_dir')
+        
+        # Fallback to environment variable or default
+        if not log_dir:
+            log_dir = os.environ.get('RL_LOG_DIR', './logs')
+        
+        # Ensure directory exists
+        os.makedirs(log_dir, exist_ok=True)
+        
+        # Create curriculum metrics CSV path (stage 4)
+        csv_path = os.path.join(log_dir, 'curriculum_progress.csv')
+        
+        try:
+            self.curriculum_csv_file = open(csv_path, 'w', newline='')
+            self.curriculum_csv_writer = csv.DictWriter(
+                self.curriculum_csv_file,
+                fieldnames=['iteration', 'level', 'prev_height_cm', 'new_height_cm', 'total_attempts', 'avg_attempts_per_env', 'successful_jumps']
+            )
+            self.curriculum_csv_writer.writeheader()
+            self.curriculum_csv_file.flush()
+            print(f"📊 Curriculum logger initialized: {csv_path}")
+        except Exception as e:
+            print(f"Warning: Could not initialize curriculum logger: {e}")
+            self.curriculum_csv_writer = None
+        
+        # Create avoidance metrics CSV path (stage 3)
+        avoidance_csv_path = os.path.join(log_dir, 'avoidance_progress.csv')
+        try:
+            self.avoidance_csv_file = open(avoidance_csv_path, 'w', newline='')
+            self.avoidance_csv_writer = csv.DictWriter(
+                self.avoidance_csv_file,
+                fieldnames=['iteration', 'total_episodes', 'goals_reached', 'reach_success_rate', 'collisions', 'collision_rate', 'avg_distance_to_goal']
+            )
+            self.avoidance_csv_writer.writeheader()
+            self.avoidance_csv_file.flush()
+            print(f"📊 Avoidance logger initialized: {avoidance_csv_path}")
+        except Exception as e:
+            print(f"Warning: Could not initialize avoidance logger: {e}")
+            self.avoidance_csv_writer = None
+    
+    def _log_curriculum_advancement(self):
+        """Log curriculum advancement to CSV"""
+        if self.curriculum_csv_writer is None or not self.curriculum_advance_metrics:
+            return
+        
+        try:
+            metrics = self.curriculum_advance_metrics
+            self.curriculum_csv_writer.writerow({
+                'iteration': getattr(self, 'global_iteration', 0),
+                'level': metrics.get('curriculum_level', 0),
+                'prev_height_cm': metrics.get('prev_height_cm', 0),
+                'new_height_cm': metrics.get('new_height_cm', 0),
+                'total_attempts': metrics.get('total_attempts', 0),
+                'avg_attempts_per_env': f"{metrics.get('avg_attempts_per_env', 0):.1f}",
+                'successful_jumps': metrics.get('successful_jumps', 0),
+            })
+            self.curriculum_csv_file.flush()
+        except Exception as e:
+            print(f"Warning: Could not write curriculum metrics: {e}")
+
+    def _log_avoidance_metrics(self, iteration):
+        """Log stage 3 avoidance metrics to CSV periodically"""
+        if self.avoidance_csv_writer is None or self.avoidance_episodes_total == 0:
+            return
+        
+        try:
+            success_rate = (self.avoidance_goals_reached / self.avoidance_episodes_total) * 100 if self.avoidance_episodes_total > 0 else 0
+            collision_rate = (self.avoidance_collisions / self.avoidance_episodes_total) * 100 if self.avoidance_episodes_total > 0 else 0
+            
+            self.avoidance_csv_writer.writerow({
+                'iteration': iteration,
+                'total_episodes': self.avoidance_episodes_total,
+                'goals_reached': self.avoidance_goals_reached,
+                'reach_success_rate': f"{success_rate:.1f}%",
+                'collisions': self.avoidance_collisions,
+                'collision_rate': f"{collision_rate:.1f}%",
+                'avg_distance_to_goal': f"{self.avoidance_avg_distance:.3f}",
+            })
+            self.avoidance_csv_file.flush()
+            print(f"📊 Avoidance metrics: {success_rate:.1f}% reach rate | {collision_rate:.1f}% collision rate | Avg dist: {self.avoidance_avg_distance:.3f}m")
+        except Exception as e:
+            print(f"Warning: Could not write avoidance metrics: {e}")
+
+    def __del__(self):
+        """Clean up CSV files on deletion"""
+        if hasattr(self, 'curriculum_csv_file') and self.curriculum_csv_file:
+            try:
+                self.curriculum_csv_file.close()
+            except:
+                pass
+        if hasattr(self, 'avoidance_csv_file') and self.avoidance_csv_file:
+            try:
+                self.avoidance_csv_file.close()
+            except:
+                pass
     def _create_obstacles(self):
         """Create obstacles in the environment"""
         if not self.env_cfg.get('use_obstacles', False):
@@ -1048,6 +1167,9 @@ class Go2NavigationEnv(Go2BaseEnv):
             collision_mask = distance < collision_threshold
             close_mask = (distance < safety_margin) & ~collision_mask
             
+            # Track collisions for stage 3 (set per-env flag, don't count each frame)
+            self.episode_had_collision = torch.logical_or(self.episode_had_collision, collision_mask)
+            
             collision_penalty += torch.where(collision_mask, -1.0, 0.0)
             
             collision_penalty += torch.where(close_mask, -0.1, 0.0)
@@ -1204,8 +1326,16 @@ class Go2NavigationEnv(Go2BaseEnv):
             robot_pos = self.base_pos[:, :2]
             distance = torch.norm(robot_pos - target_pos, dim=1)
             
+            # Track average distance for stage 3
+            self.avoidance_avg_distance = distance.mean().item()
+            
             # Terminate when goal is reached using shared termination radius
             goal_reached = distance < GOAL_TERMINATION_RADIUS
+            
+            # Track goal reaches for stage 3 avoidance logging
+            num_goals_reached = goal_reached.sum().item()
+            self.avoidance_goals_reached += num_goals_reached
+            
             self.reset_buf |= goal_reached
             
             # Also terminate for significant overshoot (walked well past goal)
@@ -1225,8 +1355,18 @@ class Go2NavigationEnv(Go2BaseEnv):
 
     def reset_idx(self, envs_idx):
         """Override to reset navigation-specific tracking"""
+        # Track episode counters for stage 3 avoidance
+        self.avoidance_episodes_total += len(envs_idx)
+        
+        # Count episodes with collisions (true collision rate: 0-100%)
+        collisions_in_reset = self.episode_had_collision[envs_idx].sum().item()
+        self.avoidance_collisions += collisions_in_reset
+        
         # Call base class reset
         super().reset_idx(envs_idx)
+        
+        # Reset collision flag for these environments
+        self.episode_had_collision[envs_idx] = False
 
         # Reset strict curriculum success tracking.
         self.jump_success_armed[envs_idx] = False
@@ -1278,8 +1418,25 @@ class Go2NavigationEnv(Go2BaseEnv):
         self.curriculum_level       = new_level
         self.jump_success_count     = 0
 
+        # Calculate metrics for this advancement
+        avg_attempts = (self.jump_attempts_at_level / self.num_envs) if self.num_envs > 0 else 0
+        self.curriculum_advance_metrics = {
+            "curriculum_level": new_level,
+            "prev_height_cm": old_h * 100,
+            "new_height_cm": new_h * 100,
+            "total_attempts": self.jump_attempts_at_level,
+            "avg_attempts_per_env": avg_attempts,
+            "successful_jumps": self.jump_success_threshold,
+        }
+        
         print(f"🎓 Curriculum advanced: {old_h*100:.1f}cm → {new_h*100:.1f}cm "
-              f"(level {new_level}/{len(self.curriculum_heights)-1})")
+              f"(level {new_level}/{len(self.curriculum_heights)-1}) "
+              f"| Attempts: {self.jump_attempts_at_level} total ({avg_attempts:.1f} per env)")
+        
+        self._log_curriculum_advancement()  # Log to CSV
+        
+        self.jump_attempts_at_level = 0
+        self.jump_attempts_per_env.zero_()
 
 
     def _reposition_dynamic_obstacles(self):
@@ -1429,6 +1586,11 @@ class Go2NavigationEnv(Go2BaseEnv):
             valid_success = crossed & centered & self.jump_success_armed & (~self.jump_success_counted)
 
             successful_crossings = int(valid_success.sum().item())
+            
+            # Count every step as an attempt for all environments
+            self.jump_attempts_at_level += self.num_envs
+            self.jump_attempts_per_env += 1
+            
             if successful_crossings > 0:
                 self.jump_success_counted |= valid_success
                 self.jump_success_count += successful_crossings

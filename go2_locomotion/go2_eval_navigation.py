@@ -148,6 +148,10 @@ def main():
     policy = runner.get_inference_policy(device=gs.device)
 
     obs, _ = env.reset()
+    
+    # Camera rotation damping for smooth turns
+    camera_yaw = 0.0
+    camera_yaw_damping = 0.1  # Smoothing factor (0.0 = no update, 1.0 = instant)
 
     with torch.no_grad():
         if args.record:
@@ -167,20 +171,23 @@ def main():
                 actions = policy(obs)
                 obs, rews, dones, infos = env.step(actions)
 
-                # Over-the-shoulder camera: behind and above the robot, looking forward
+                # Over-the-shoulder camera: behind and above the robot, looking forward along its path
                 base_pos = env.base_pos[0].cpu().numpy()
                 base_yaw = env.base_radians[0, 2].cpu().item()
 
-                cam_behind  = 2.5   # meters behind robot
+                # Smooth camera rotation to lag behind robot turns
+                camera_yaw += camera_yaw_damping * (base_yaw - camera_yaw)
+
+                cam_behind  = 3.5   # meters behind robot
                 cam_above   = 1.5   # meters above robot
                 look_ahead  = 2.0   # lookat point ahead of robot
 
-                cam_x = base_pos[0] - cam_behind * np.cos(base_yaw)
-                cam_y = base_pos[1] - cam_behind * np.sin(base_yaw)
+                cam_x = base_pos[0] - cam_behind * np.cos(camera_yaw)
+                cam_y = base_pos[1] - cam_behind * np.sin(camera_yaw)
                 cam_z = base_pos[2] + cam_above
 
-                look_x = base_pos[0] + look_ahead * np.cos(base_yaw)
-                look_y = base_pos[1] + look_ahead * np.sin(base_yaw)
+                look_x = base_pos[0] + look_ahead * np.cos(camera_yaw)
+                look_y = base_pos[1] + look_ahead * np.sin(camera_yaw)
                 look_z = base_pos[2] + 0.3  # slightly above ground level
 
                 env.cam.set_pose(pos=(cam_x, cam_y, cam_z), lookat=(look_x, look_y, look_z))

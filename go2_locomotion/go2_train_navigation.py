@@ -36,6 +36,11 @@ from rsl_rl.runners import OnPolicyRunner
 import genesis as gs
 from go2_env_navigation import Go2NavigationEnv
 
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None
+
 
 def get_navigation_train_cfg(exp_name, max_iterations):
     return {
@@ -299,25 +304,21 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["reward_scales"]["height"] = 0.0
 
         # === PHASE-GATED JUMP REWARDS (replaces monolithic jump_clearance) ===
+        # Increased to force jumping over stepping/sidestepping behavior
         # Phase 1: Ng et al. 1999 potential — height_frac × exp(-dist/1.5).
-        # Always-on dense gradient; reduced scale (was 5.0) because the new impl fires
-        # more broadly (no velocity gate), so per-step magnitude is already well-covered.
-        reward_cfg["reward_scales"]["jump_approach"] = 1.2
+        reward_cfg["reward_scales"]["jump_approach"] = 2.0  # Increased from 1.2
         # Phase 2: Explosive takeoff at the wall (gate tightened 1.5→0.8 m, v_z² reward).
-        # Scale reduced from 15→10 because v_z² returns up to 4.0 vs the old clamp(v_z,0,2)=2.0,
-        # so effective maximum per step is comparable.
-        reward_cfg["reward_scales"]["jump_takeoff"] = 8.0
+        reward_cfg["reward_scales"]["jump_takeoff"] = 12.0  # Increased from 8.0
         # Phase 3: Flight — clearance threshold halved (obs_h×0.5 instead of obs_h),
-        # spatial gate tightened (2.5→1.5 m). Scale increased 25→35 to keep flight
-        # dominant even though it now fires more easily at curriculum start.
-        reward_cfg["reward_scales"]["jump_flight"] = 18.0
+        # spatial gate tightened (2.5→1.5 m). Highest scale to make flight most attractive.
+        reward_cfg["reward_scales"]["jump_flight"] = 25.0  # Increased from 18.0
         # Legacy jump_clearance: zero — superseded by phase rewards above
         reward_cfg["reward_scales"]["jump_clearance"] = 0.0
         # Landing stability
         reward_cfg["reward_scales"]["landing_stability"] = 4.0
         # Reward once past the blocker — fills the dead zone while body is above/behind obstacle
         reward_cfg["reward_scales"]["blocker_clearance"] = 1.5
-        reward_cfg["reward_scales"]["centerline_near_blocker"] = -6.0
+        reward_cfg["reward_scales"]["centerline_near_blocker"] = -8.0  # Increased penalty from -6.0 to discourage sidestepping
 
         # Goal-reaching (secondary objective — robot reaches green cylinder beyond blocker)
         reward_cfg["reward_scales"]["target_proximity"] = 2.0
@@ -343,11 +344,11 @@ def get_navigation_cfgs(curriculum_stage=1):
         env_cfg["terminate_on_collision"] = False  # base link never contacts a ≤15cm box
 
         # === HEIGHT CURRICULUM CONFIG ===
-        # Start at 5cm — reachable by normal high-stepping from walking checkpoint.
+        # Started increased to make stepping over harder, forcing jump behavior
         # Auto-advances every jump_success_threshold successful crossings.
-        env_cfg["jump_curriculum_start_height"] = 0.05
-        env_cfg["jump_curriculum_target_height"] = 0.15
-        env_cfg["jump_curriculum_step"] = 0.025              # 5→7.5→10→12.5→15 cm
+        env_cfg["jump_curriculum_start_height"] = 0.075  # Increased from 0.05 to prevent stepping over
+        env_cfg["jump_curriculum_target_height"] = 0.175  # Increased from 0.15 to make jumping more challenging
+        env_cfg["jump_curriculum_step"] = 0.025              # 7.5→10→12.5→15→17.5 cm
         env_cfg["jump_success_threshold"] = 200              # crossings per level before advancing
 
         # Obstacle geometry
@@ -356,7 +357,9 @@ def get_navigation_cfgs(curriculum_stage=1):
         env_cfg["dynamic_obstacle_distance"] = 2.0           # 2m ahead: obstacle dominates from step 1
 
         # Keep the jump line centered and require true airborne crossing for curriculum credit.
-        env_cfg["jump_centerline_tolerance"] = 0.35
+        # Tighter tolerance to prevent sidestepping around the blocker:
+        # Blocker is 0.55m wide (0.275m half-width from center), so tolerance must be < 0.275m to force jumping
+        env_cfg["jump_centerline_tolerance"] = 0.20  # Reduced from 0.35m to close sidestepping loophole
         env_cfg["jump_centerline_penalty_window"] = 1.8
         env_cfg["jump_success_x_margin"] = 0.25
         env_cfg["jump_success_height_margin"] = 0.03
@@ -495,6 +498,9 @@ def main():
     # Save configs
     pickle.dump([env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg],
                 open(f"{log_dir}/cfgs.pkl", "wb"))
+    
+    # Pass log directory to environment for curriculum logging
+    env_cfg["log_dir"] = log_dir
 
     # Create NAVIGATION environment
     env = Go2NavigationEnv(
@@ -529,6 +535,10 @@ def main():
         # for iteration in range(args.max_iterations):
         is_resuming = args.resume or (args.resume_path is not None)
         runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True, pbar=pbar, resume_flag=is_resuming)
+    
+    # Log final stage 3 avoidance metrics
+    if hasattr(runner.env, '_log_avoidance_metrics'):
+        runner.env._log_avoidance_metrics(args.max_iterations)
     # runner.learn(num_learning_iterations=args.max_iterations, init_at_random_ep_len=True)
 
 

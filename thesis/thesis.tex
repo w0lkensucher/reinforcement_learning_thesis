@@ -19,7 +19,7 @@
 
 
 % details about your thesis
-\newcommand{\titel}{Erlernen von Navigation und Gestenerkennung mittels Deep Reinforcement Learning auf einem vierbeinigem Roboter}
+\newcommand{\titel}{Navigation und Interaktion mittels Deep Reinforcement Learning auf vierbeinigem Roboter}
 \newcommand{\artderarbeit}{Bachelorarbeit}  % {Bachelorarbeit,Masterarbeit}
 \newcommand{\autor}{Anouvong Bounnhong}
 \newcommand{\studiengang}{Elektrotechnik und Informationstechnik}  % {Informatik,Wirtschaftsinformatik,Medieninformatik}
@@ -59,6 +59,10 @@
 \usepackage[toc]{glossaries}
 \usepackage{pdfpages}
 \usepackage{dirtytalk}
+\usepackage{subcaption}
+\usepackage{float}
+
+\usepackage{Blindtext}
 
 % table setup
 \usepackage{longtable}
@@ -130,10 +134,6 @@ style=ieee
 \newcommand{\wrt}{\mbox{w.\,r.\,t.\ }}
 \newcommand{\etal}{\mbox{\emph{et\,al.\ }}}
 
-
-% TODO remove if not needed...
-\usepackage{blindtext}
-
 % load glossary entries
 \makenoidxglossaries
 \loadglsentries{glossary}
@@ -159,8 +159,9 @@ style=ieee
 \include{content/2_foundation}
 \include{content/3_state_of_the_art}
 \include{content/4_methods}
-\include{content/5_outlook}
-\include{content/6_summary}
+\include{content/5_results}
+\include{content/6_discussion}
+\include{content/7_summary}
 
 % remove if not needed
 \appendix
