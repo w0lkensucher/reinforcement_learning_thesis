@@ -24,7 +24,13 @@ Das Training tiefer Netze erfolgt durch die Minimierung einer Kostenfunktion, we
 Die Parameter werden anschließend durch Optimierungsverfahren aktualisiert. Goodfellow et al. \cite{Goodfellow-et-al-2016} und François-Lavet et al. \cite{francois-lavetIntroductionDeepReinforcement2018} nennen dabei unter anderem stochastische Gradientenabstieg oder Varianten dessen wie Adam oder RMSprop als verbreitete Optimierungsverfahren.
 \section{Reinforcement Learning} \label{sec:rl_basics}
 Sutton und Barto beschreiben in \cite{sutton2018reinforcement} Reinforcement Learning als einen computergestützten Ansatz zum Verständnis und zur Automatisierung von zielgerichtetem Lernen und Entscheidungsfindung. Autonome Agenten interagieren dabei mit einer Umgebung und entdecken dabei optimale Verhaltensweisen \cite{silverRewardEnough2021, arulkumaranDRL2017, Kober_IJRR_2013}. Im Gegensatz zum überwachten Lernen erhält der Agent keine direkten Zielvorgaben, sondern muss, wie in \cite{sutton2018reinforcement} beschrieben, durch Trial-and-Error und verzögerten Belohnungssignalen lernen, welche Aktionen den größten Nutzen bringt und damit die Belohnungssignale maximiert.
-\subsection{Der Markov-Entscheidungsprozess und dessen mathematische Formulierung} \label{MDP} % TODO Bild aus Sutton/Barto
+\subsection{Der Markov-Entscheidungsprozess und dessen mathematische Formulierung} \label{MDP} 
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.75\textwidth]{figures/rl_diagram.png}
+	\caption{Interaktionen zwischen Agenten und Umgebung in einem Markov-Entscheidungsprozess in  \cite{sutton2018reinforcement}}
+\end{figure}
 Die mathematische Grundlage für Reinforcement learning bildet in der Regel ein Markov-Entscheidungsprozess oder Markov Decision Process (MDP), wie von Sutton und Barto in \cite{sutton2018reinforcement} beschrieben wird. Formal wird ein MDP häufig als Tupel ($S, A, T, R, \gamma$) dargestellt \cite{francois-lavetIntroductionDeepReinforcement2018, skalseDefiningCharacterizingReward2025, moralesSurveyDeepLearning2021}. \newline
 Dieses Tupel setzt sich zusammen aus:
 \begin{itemize}
@@ -155,6 +161,12 @@ dar, wobei $\theta$ der Rotationswinkel um die Einheitsachse $n = (n_x, n_y, n_z
 	q_3 &= \cos(\frac{\alpha}{2})\cos(\frac{\beta}{2})\sin(\frac{\gamma}{2}) - \sin(\frac{\alpha}{2})\sin(\frac{\beta}{2})\cos(\frac{\gamma}{2})
 \end{aligned}
 \end{equation}
-% TODO Bild einfügen: kartesisch vs sphärisch vs euler
+
+\begin{figure}
+	\centering
+	\includegraphics[width=0.5\textwidth]{figures/Eulerangles.png}
+	\caption{Eulerwinkel-Illustration in \cite{wiki:eulerangles}}
+\end{figure}
+
 \subsection{Dynamik und Kontaktmodellierung}
-Die Simulation der quadrupeden Robotern basiert auf einem dynamischen Modell mit Berücksichtigung von Kontaktkräften zwischen Beinen und Untergrund, dessen Implementierung vollständig vom Framework übernommen wird \cite{authorsGenesisGenerativeUniversal2024}.
+Die Simulation der quadrupeden Robotern basiert auf einem dynamischen Modell mit Berücksichtigung von Kontaktkräften zwischen Beinen und Untergrund, dessen Implementierung vollständig vom Framework übernommen wird \cite{authorsGenesisGenerativeUniversal2024} und in der Aufgabenstellung nicht näher betrachtet wird.

@@ -77,9 +77,8 @@ Die Entropie der Policy, welche in \autoref{fig:stand_entropy} zu sehen ist, nim
 \end{figure}
 
 Auf Grundlage der ersten Stufe besteht die Aufgabe des Roboters in der zweiten Stufe darin, eine vorgegebene Gehgeschwindigkeit stabil zu verfolgen und dabei Laufen zu lernen. Der durchschnittliche Return für das Verfolgen der linearen Geschwindigkeit in \autoref{fig:walk_tracking_lin_vel} fängt an, bei 400 Iterationen deutlich zu steigen, bis es sich bei 600 Iterationen stabilisiert. Der gesamte durchschnittliche Return spiegelt dieses Verhalten ebenfalls wieder. \newline
-Die durchschnittliche Episodenlänge in \autoref{fig:walk_mean_length} nimmt im Verlauf des Trainings ähnlich wie die Returns bei Iteration 300 über alle Seeds hinweg zu und stabilisert sich ebenfalls bei rund 600 Iterationen. Zusammen mit der Entropie, welche sich bei 600 Iterationen stabilisiert, deutet dies darauf hin, dass die Roboter die Gehbewegung erlernt, und die Policy eine geringe Variabilität aufweist.
+Die durchschnittliche Episodenlänge in \autoref{fig:walk_mean_length} nimmt im Verlauf des Trainings ähnlich wie die Returns bei Iteration 300 über alle Seeds hinweg zu und stabilisert sich ebenfalls bei rund 600 Iterationen. Zusammen mit der Entropie, welche sich bei 600 Iterationen stabilisiert, deutet dies darauf hin, dass die Roboter die Gehbewegung erlernt, und die Policy eine geringe Variabilität aufweist. Der steile Anstieg in der durchschnittlichen Episodenlänge, des Returns und der Gehgeschwindigkeit bei ca. 50 Iterationen lässt sich durch das Fortsetzen des Trainings auf Grundlage der Stehpolicy begründen.
 
-Ein Vergleich der Trainingsergebnisse zwischen den Seeds zeigt, dass die Lernkurven in allen Fällen einen ähnlichen Verlauf aufweisen und ähnliche Endleistungen erzielen, welches auch durch visuelle Auswertungen bestätigt wird. In den folgenden Stufen wurden mit den Trainingsergebnissen aus Seed 1 bei Schritt 1049 weitergearbeitet.
 \begin{figure}[htbp]
 	\centering
 	\begin{subfigure}[b]{0.5\textwidth}
@@ -110,7 +109,62 @@ Ein Vergleich der Trainingsergebnisse zwischen den Seeds zeigt, dass die Lernkur
 	\label{fig:walk_metrics}
 \end{figure}
 
+Ein Vergleich der Trainingsergebnisse zwischen den Seeds zeigt, dass die Lernkurven in allen Fällen einen ähnlichen Verlauf aufweisen und ähnliche Endleistungen erzielen, welches auch durch visuelle Auswertungen bestätigt wird. In den folgenden Stufen wurden mit den Trainingsergebnissen aus Seed 1 bei Schritt 1049 weitergearbeitet.
 \subsection{Navigieren: Dritte Stufe im Curriculum Learning}
 
-\subsection{Springen: Vierte Stufe im Curriculum Learning}
+\begin{figure}[htbp]
+	\centering
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/avoid_env_1.png}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/avoid_env_2.png}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/avoid_env_3.png}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=0.95\textwidth]{figures/avoid_env_4.png}
+	\end{subfigure}
+	\caption{Navigationsumgebung für Training von Ausweichen von Hindernissen}
+	\label{fig:avoid_env}
+\end{figure}
+In der dritten Stufe wurde das Ausweichen von Hindernissen auf Grundlage der zweiten Stufe trainiert, bei dem man ein bestimmtes Ziel annähern und erreichen muss. Die Schrittachse fängt hier erst beim Schritt an, ab dem trainiert. \newline
+Die Metriken in \autoref{fig:avoid_metrics} konvergieren, außer der Entropie, hier bereits ab Iteration 1100, was allerdings nicht zu einer Policy führt, welche das Ziel zuverlässig ansteuert und erreicht.
+Allerdings ist die Policy aus Stufe 2 bereits für diese Aufgabe nutzbar ist, weshalb eine Exploration der Handlungsmöglichkeiten auch keine unmittelbare Verbesserung in Aussicht stellt. Dies wurde durch visuelle Inspektion bei Iteration 1000 festgestellt, welche noch die Laufgrundlage darstellt, auf welchem das Training stattfand.
 
+\begin{figure}[htbp]
+	\centering
+	\begin{subfigure}[b]{0.5\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/avoid_mean_episode_length_across_runs.png}
+		\caption{Durchschnittliche Episodenlänge bei Training mit unterschiedlichen Seeds}
+		\label{fig:avoid_mean_length}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/avoid_entropy_across_runs.png}
+		\caption{Entropie bei Training mit unterschiedlichen Seeds}
+		\label{fig:avoid_entropy}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/avoid_rew_reward_across_runs.png}
+		\caption{Return bzw. Rewards bei Training mit unterschiedlichen Seeds}
+		\label{fig:avoid_rewards}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.45\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/avoid_rew_target_proximity_across_runs.png}
+		\caption{Reward 'target\_proximity' bei Training mit unterschiedlichen Seeds}
+		\label{fig:avoid_tracking_lin_vel}
+	\end{subfigure}
+	\caption{Wichtigsten Metriken für die Bewertung des Trainings von Ausweichen von Hindernissen}
+	\label{fig:avoid_metrics}
+\end{figure}
+\subsection{Springen: Vierte Stufe im Curriculum Learning}
+% TODO
