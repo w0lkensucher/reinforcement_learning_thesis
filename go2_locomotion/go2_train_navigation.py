@@ -76,7 +76,7 @@ def get_navigation_train_cfg(exp_name, max_iterations):
         "num_steps_per_env": 48,  # Longer rollouts = cleaner value estimates = less noisy gradients
         "save_interval": 10,
         "empirical_normalization": None,
-        "seed": 8, # set to different seeds for multiple runs
+        "seed": 1, # set to different seeds for multiple runs
     }
 
 
@@ -279,6 +279,9 @@ def get_navigation_cfgs(curriculum_stage=1):
         env_cfg["dynamic_obstacle_height"] = 0.3   # Tall - forces avoidance (RED)
         env_cfg["dynamic_obstacle_width"] = 0.4
         env_cfg["dynamic_obstacle_distance"] = 4.0  # Closer: robot reaches it in ~8s at 0.5m/s (within 600-step episode)
+        # For stage 3, use fixed height (no curriculum) - set start = target
+        env_cfg["jump_curriculum_start_height"] = 0.3
+        env_cfg["jump_curriculum_target_height"] = 0.3
     
     elif curriculum_stage == 4:
         # Stage 4: Jump over a LOW obstacle to reach goal (use --dynamic_obstacles)
@@ -293,8 +296,8 @@ def get_navigation_cfgs(curriculum_stage=1):
         # Height curriculum: starts at 5cm (clearable by high-stepping normal gait) and auto-advances
         # to 15cm target as the robot accumulates successful crossings.
         command_cfg["lin_vel_x_range"] = [0.45, 0.85]
-        command_cfg["lin_vel_y_range"] = [-0.03, 0.03]
-        command_cfg["ang_vel_range"] = [-0.05, 0.05]   # Keep runs nearly straight to reduce bypass behaviors
+        command_cfg["lin_vel_y_range"] = [0.0, 0.0]      # DISABLED: Force straight-line jumping, no lateral dodging
+        command_cfg["ang_vel_range"] = [0.0, 0.0]         # DISABLED: Force forward-facing jumps, no turning to bypass
 
         reward_cfg["tracking_sigma"] = 0.25
         reward_cfg["jump_height_threshold"] = 0.2
@@ -318,7 +321,7 @@ def get_navigation_cfgs(curriculum_stage=1):
         reward_cfg["reward_scales"]["landing_stability"] = 4.0
         # Reward once past the blocker — fills the dead zone while body is above/behind obstacle
         reward_cfg["reward_scales"]["blocker_clearance"] = 1.5
-        reward_cfg["reward_scales"]["centerline_near_blocker"] = -8.0  # Increased penalty from -6.0 to discourage sidestepping
+        reward_cfg["reward_scales"]["centerline_near_blocker"] = -25.0  # HEAVILY penalize sideways approach
 
         # Goal-reaching (secondary objective — robot reaches green cylinder beyond blocker)
         reward_cfg["reward_scales"]["target_proximity"] = 2.0
@@ -330,13 +333,14 @@ def get_navigation_cfgs(curriculum_stage=1):
         # Walking base: keep locomotion quality so policy doesn't forget how to walk
         reward_cfg["reward_scales"]["tracking_lin_vel"] = 1.5
         reward_cfg["reward_scales"]["tracking_ang_vel"] = 0.4
-        reward_cfg["reward_scales"]["forward_movement"] = 0.6
+        reward_cfg["reward_scales"]["forward_movement"] = 1.0  # INCREASED: encourage aggressive forward charging
         reward_cfg["reward_scales"]["similar_to_default"] = -0.04
-        reward_cfg["reward_scales"]["action_rate"] = -0.02
-        reward_cfg["reward_scales"]["symmetry"] = -0.08
-        reward_cfg["reward_scales"]["lin_vel_z"] = -0.05
+        reward_cfg["reward_scales"]["action_rate"] = -0.01  # REDUCED: allow more explosive jumping movements
+        reward_cfg["reward_scales"]["symmetry"] = -0.08  # REVERTED: allow asymmetric jumping postures
+        reward_cfg["reward_scales"]["lin_vel_z"] = 0.0   # DISABLED: allow free vertical movement without penalty
 
-        # No avoidance: jump, don't dodge
+        # Allow collision experience: robot learns jumping as natural escape from obstacle
+        # Remove penalty so robot discovers jumping by hitting obstacle, not by pre-emptive avoidance
         reward_cfg["reward_scales"]["obstacle_avoidance"] = 0.0
 
         env_cfg["episode_length_s"] = 30.0   # Short: obstacle is 2m away, each attempt is quick
@@ -344,15 +348,15 @@ def get_navigation_cfgs(curriculum_stage=1):
         env_cfg["terminate_on_collision"] = False  # base link never contacts a ≤15cm box
 
         # === HEIGHT CURRICULUM CONFIG ===
-        # Started increased to make stepping over harder, forcing jump behavior
+        # Force jumping from the start - no stepping possible
         # Auto-advances every jump_success_threshold successful crossings.
-        env_cfg["jump_curriculum_start_height"] = 0.075  # Increased from 0.05 to prevent stepping over
-        env_cfg["jump_curriculum_target_height"] = 0.175  # Increased from 0.15 to make jumping more challenging
-        env_cfg["jump_curriculum_step"] = 0.025              # 7.5→10→12.5→15→17.5 cm
+        env_cfg["jump_curriculum_start_height"] = 0.20   # Start: forces jumping, not steppable
+        env_cfg["jump_curriculum_target_height"] = 0.30  # Target: challenging but achievable
+        env_cfg["jump_curriculum_step"] = 0.025          # 20→22.5→25→27.5→30 cm
         env_cfg["jump_success_threshold"] = 200              # crossings per level before advancing
 
         # Obstacle geometry
-        env_cfg["dynamic_obstacle_height"] = 0.15            # max/target height (curriculum goes up to this)
+        env_cfg["dynamic_obstacle_height"] = 0.20            # default: forces jumping, not steppable
         env_cfg["dynamic_obstacle_width"] = 0.55
         env_cfg["dynamic_obstacle_distance"] = 2.0           # 2m ahead: obstacle dominates from step 1
 

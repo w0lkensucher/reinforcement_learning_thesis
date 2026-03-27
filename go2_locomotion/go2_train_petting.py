@@ -56,8 +56,8 @@ def get_petting_train_cfg(exp_name, max_iterations):
         },
         "policy": {
             "activation": "elu",
-            "actor_hidden_dims": [256, 128, 64],  # Smaller network for petting
-            "critic_hidden_dims": [256, 128, 64],
+            "actor_hidden_dims": [512, 256, 128],
+            "critic_hidden_dims": [512, 256, 128],
             "init_noise_std": 0.3,
             "class_name": "ActorCritic",
         },
@@ -71,7 +71,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
         "num_steps_per_env": 32,  # Longer episodes for petting
         "save_interval": 50,
         "empirical_normalization": True,
-        "seed": 42, # set to different seeds for multiple runs
+        "seed": 8, # set to different seeds for multiple runs
     }
 
 
@@ -142,21 +142,23 @@ def get_petting_cfgs():
         "tracking_sigma": 0.25,
         "base_height_target": 0.42,  # Slightly lower for petting
         "reward_scales": {
-            # Petting-focused rewards (scaled down with increased petting frequency)
-            "gesture_during_touch": 0.5,  # Reduced from 5.0 (more frequent petting)
-            "petting_response": 0,        # Set to 0, as gesture_during_touch handles this
-            "gesture_movement": 5.0,       # INCREASED: Make movement much more rewarding than stability
-            "petting_stability": 0.2,      # REDUCED: Prioritize movement over stability during gestures
-            "flexible_height": 3.0,        # INCREASED: Strongly enforce standing height
-            "upright": 0.5,                # Keep moderate
-            "no_sitting": -10.0,            # New reward to discourage sitting
+            # Gesture/touch rewards (working config from seed_1_20260324)
+            "gesture_during_touch": 2.0,      # Reward responding when touched
+            "gesture_movement": 1.0,          # Reward general movement
+            "petting_response": 0,            # Not used
             
-            # Very reduced base rewards (minimal since commands are zero)
-            "tracking_lin_vel": 0.0,       # DISABLED: Remove movement incentive when not petted
-            "tracking_ang_vel": 0.0,       # DISABLED: Remove rotation incentive when not petted
-            "lin_vel_z": 0,             # Penalize vertical movement
-            "action_rate": -0.1,          # REDUCED: Allow effort to stand up without high penalty
-            "similar_to_default": -0.05, # Very light (gestures deviate from default)
+            # Stability/posture rewards (strong)
+            "petting_stability": 5.0,         # Reward balance during petting
+            "flexible_height": 5.0,           # Reward maintaining standing height
+            "upright": 10.0,                  # STRONG: Tipping penalty
+            "no_sitting": -10.0,              # Discourage sitting
+            
+            # Base rewards (minimal)
+            "tracking_lin_vel": 0.0,          # No incentive to move base
+            "tracking_ang_vel": 0.0,          # No incentive to rotate base
+            "lin_vel_z": 0,                   # Penalize vertical movement
+            "action_rate": -0.1,              # Action smoothness
+            "similar_to_default": -0.05,      # Light deviation penalty
         },
     }
     

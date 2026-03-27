@@ -1,3 +1,71 @@
-\chapter{Diskussion}\label{ch:discussion}
+\chapter{Diskussion und Ausblick}\label{ch:discussion}
+Die nachfolgende Interpretation stützt sich, wie in 
+\autoref{ch:methods} beschrieben, primär auf die visuelle 
+Auswertung aufgezeichneter Episoden. Die quantitativen 
+Metriken werden ergänzend herangezogen, um die 
+qualitativen Beobachtungen zu untermauern.
 
-\Blindtext
+\section{Zusammenfassung der wichtigsten Ergebnisse}
+
+\subsection{Interaktionsumgebung}
+Das Training in der Interaktionsumgebung zeigt ein zweigeteiltes Bild. In der ersten Stufe erlernte die Policy das stabile Stehen zuverlässig über alle drei Seeds (1, 8 und 42), was sich in einem raschen Anstieg der durchschnittlichen Episodenlänge auf den Maximalwert von 1000 zeigt (siehe \autoref{fig:stand_pet_metrics}). Die visuelle Auswertung bei Iteration 50 bestätigte über alle Seeds hinweg stabiles Stehen.
+In der zweiten Stufe war das Erlernen einer stabilen Geste während der Berührung nicht erfolgreich. Obwohl die Episodenlänge zunächst den Maximalwert erreichte, fiel sie im weiteren Trainingsverlauf bei allen Seeds stark ab und stabilisierte sich nicht. Der Reward für die Gestenbewegung verblieb über den gesamten Trainingsverlauf nahe null, und die Entropie stieg kontinuierlich an, ohne zu konvergieren. Die visuelle Auswertung bestätigte, dass kein Seed eine stabile Geste über die gesamte Episode aufrechterhalten konnte.
+
+\subsection{Navigationsumgebung}
+Das Training in der Navigationsumgebung demonstriert eine klare Leistungssteigerung über die ersten drei Curriculum-Stufen hinweg. In den frühen Stufen (Stehen und Laufen) erlernte die Policy stabile Gangmuster zuverlässig über alle getesteten Seeds (1, 8 und 42). Dies zeigt sich in den Lernkurven durch eine konsistente Konvergenz der durchschnittlichen Returns sowie der Episodenlängen (siehe \autoref{fig:stand_metrics} und \autoref{fig:walk_metrics}).
+
+Ein besonders auffälliges Ergebnis ist die Generalisierungsfähigkeit der in der zweiten Stufe trainierten Policy. Bei der direkten Anwendung auf die Navigationsaufgabe mit Hindernissen zeigte der Agent, dass dieser ohne explizites Training auf Hindernisvermeidung bereits in der Lage war, Hindernisse zuverlässig zu umgehen und das Ziel anzusteuern. Das Verhalten war konsistent über alle drei Seeds zu beobachten.
+
+Im Kontrast hierzu war das Training in der vierten Stufe (Springen) nicht erfolgreich. Obwohl Reward Shaping eingesetzt wurde, um das Sprungverhalten gezielt zu fördern, erlernte der Agent nicht die erforderlichen explosiven Bewegungsmuster. Eine visuelle Überprüfung offenbarte, dass der Roboter bei Hindernissen kollidierte, statt diese durch Sprünge zu überwinden.
+\section{Interpretation und Ursachenanalyse}
+
+\subsection{Limitationen}
+Diese Arbeit unterliegt mehreren Limitationen, die bei der Interpretation der Ergebnisse berücksichtigt werden:
+\begin{itemize}
+	\item \textbf{Simulationsumwelt} Experimente wurden ausschließlich in der Genesis-Simulation durchgeführt, wobei der Transfer auf den physischen Go2-Roboter nicht validiert wurde
+	\item \textbf{Netzwerkarchitektur} Die verwendete Netzwerkarchitektur wurde nicht systematisch optimiert, sondern vom Genesis-Framework \cite{authorsGenesisGenerativeUniversal2024} übernommen
+	\item \textbf{Hyperparameter Tuning} Die PPO-Hyperparameter bzw. die Gewichtung der Rewards wurden nicht systematisch optimiert, sondern größtenteils ebenfalls vom Genesis-Framework \cite{authorsGenesisGenerativeUniversal2024} übernommen
+	\item \textbf{Seed Anzahl und Variabilität} Eine größere Anzahl von Seeds würde robustere statistische Aussagen ermöglichen, wobei Domain Randomization die Robustheit von den gelernten Policies weiter verstärkt
+	\item \textbf{Manuelle Curriculumübergänge} Übergänge zwischen Curriculum-Stufen erfolgen manuell basierend auf visueller Überprüfung anstelle von automatisierten Übergangskriterien wie Erfolgsquoten oder Reward-Schwellwerten für bessere Reproduzierbarkeit
+	\item \textbf{Vereinfachte Modellierung} In der Interaktionsumgebung wird die menschliche Hand als einfache Kugel modelliert und die Kollisionsdetektion basiert auf primitiven Geometrien, welche die Komplexität realer Hand-Geometrien und Kontaktdynamiken abstrahiert
+\end{itemize}
+
+Trotz dieser Limitationen bietet diese Arbeit Einblicke in die Effektivität von Deep Reinforcement Learning sowohl für die Lokomotion als auch für die Interaktionsfähigkeit von Robotern. Dabei werden klare Grenzen bei komplexen Bewegungsmustern, wie dem Erlernen von Sprüngen in der Navigationsumgebung und dem Ausführen präziser Gesten in der Interaktionsumgebung, identifiziert.
+
+\subsection{Interaktionsumgebung}
+
+Die Policy erlernte zwar nicht die vollständige vorgesehene Geste, zeigte jedoch ein bemerkenswertes emergentes Verhalten: Die entwickelten eigenen Bewegungsmuster als Reaktion auf die Kopfberührung entsprechen dem ersten Teil der zu erlernenden Geste, was darauf hindeutet, dass die Policy den Beginn der Zielbewegung implizit erlernt hat. Nach Entfernen der Berührung kehrte der Roboter einigermaßen zuverlässig in die stehende Ausgangsposition zurück, was zeigt, dass die Policy zwischen Berührungs- und Nicht-Berührungszustand unterscheiden und darauf reaktiv agieren kann.
+
+Der Kontrast zwischen dem erfolgreichen Erlernen des Stehens in der ersten Stufe und dem Scheitern der Gestenausführung in der zweiten Stufe lässt sich auf strukturelle Unterschiede in den Aufgabenanforderungen zurückführen. Das Stehen profitiert von einem dichten, kontinuierlichen Belohnungssignal, das bei jeder stabilen Position unmittelbar greift. Die Gestenausführung hingegen erfordert eine präzise zeitliche Koordination einer spezifischen Bewegungssequenz während eines externen Kontaktereignisses, was einer deutlich komplexeren Anforderung mit spärlicheren Belohnungssignal entspricht.
+
+Die Ursache für das Ausbleiben der vollständigen Geste liegt wahrscheinlich in der Struktur der Belohnungsfunktion: Da die Policy bereits durch den ersten Teil der Bewegung einen Teil des Rewards erzielen konnte, bestand kein ausreichender Anreiz, die vollständige Geste zu erlernen, wie Sutton und Barto feststellten in \cite{sutton2018reinforcement}. Dies entspricht einem klassischen Reward-Hacking-Problem, bei dem die Policy eine suboptimale Strategie findet, die die Belohnungsfunktion teilweise erfüllt, ohne das eigentliche Zielverhalten zu zeigen \cite{yuRewardModelsDeep2025, hwangboLearningAgileDynamic2019}. \newline
+Burda et al. beschreiben in \cite{burda2018explorationrandomnetworkdistillation} ebenfalls das Konzept, dass der Übergang von dichten zu spärlichen Belohnungssignalen das Lernen der Geste erschwert: Während die Policy bei der Stabilisierung (Stufe 1) kontinuierliche, dichte Belohnung für jede stabile Körperhaltung erhält, wird die Gestenbewegung durch ein nahezu konstant niedriges Belohnungssignal charakterisiert (vgl. \autoref{fig:pet_gesture_move}), was das Erlernen der vollständigen, präzise koordinierten Zielbewegung erheblich erschwert.
+
+\subsection{Navigationsumgebung}
+Der erfolgreiche und konsistente Lernprozess in den frühen Stufen (Stehen und Laufen) lässt sich auf mehrere Faktoren zurückführen: 
+\begin{itemize}
+	\item \textbf{Dichtes und kontinuierliches Belohnungssignal} Die Policy wird bei jeder stabilen Bewegung unmittelbar belohnt und bei Instabilität/Sturz bestraft
+	\item \textbf{Begrenzter Aufgabenraum} Es gibt weniger Freiheitsgrade in der Lösungsstrategie, wie stabil am Boden bleiben und sich fortbewegen, was konvergentes Lernen begünstigt
+	\item \textbf{Vorhersagbare Dynamik in stabilen Zuständen} Die Policy kann konsistente Kausalitäten zwischen Aktionen und Reaktionen lernen
+\end{itemize}
+Diese drei Faktoren erklären sowohl die robuste Konvergenz als auch die geringe Varianz zwischen den Seeds (1, 8, 42), wobei die Aufgabe inhärent stabil strukturiert ist, unabhängig von der Initialisierung.
+
+Der zugrunde liegende Mechanismus dieser Generalisierung auf Stufe 3 liegt in der impliziten Priorisierung von Stabilität in der Belohnungsstruktur: Da die Reward-Funktion durchgehend stabilen Bodenkontakt belohnt und instabile Körperpositionen oder Stürze bestraft, werden Hindernisse als Nebeneffekt dieser Stabilitätspriorisierung umgangen, nicht durch explizites Training auf Hindernisvermeidung.
+
+Das Springen hingegen stellt eine qualitativ neue Herausforderung dar: Wie bereits in \autoref{sss:jump_ability} beschrieben wird, erfordert Springen eine präzise, hochkoordinierte Aktion aller Gliedmaßen kombiniert mit einer temporären Aufgabe der Bodenkontaktstabilität und einer anspruchsvollen Landungsphase. Diese Anforderungen unterscheiden sich fundamental von den zuvor trainierten Aufgaben, bei denen Stabilität und Bodenkontakt durchgehend im Vordergrund standen.
+
+Das Scheitern in Stufe 4 hat mehrere Ursachen:
+\begin{itemize}
+	\item \textbf{Stabilitätsprinzipien weiter angewendet} Die Policy wird durch vorherige Stabilitätsprinzipien an explosiven, instabilen Bewegungen behindert, welches u.a. in \cite{hwangboLearningAgileDynamic2019, bussolaGuidedReinforcementLearning2025} aufgegriffen wurde
+	\item \textbf{Explorationsproblem} Es ist sehr unwahrscheinlich, durch zufällige Exploration die Konfiguration der Gelenkwinkel für einen Sprung zu entdecken: Dieses sparse Reward Problem wurde u.a. in \cite{heessEmergenceLocomotionBehaviours2017, bussolaGuidedReinforcementLearning2025} aufgearbeitet
+	\item \textbf{Architekturprobleme} Die limitierte Größe des Netzwerks kann Einfluss darauf haben, dass die Policy nicht zwischen zwei völlig unterschiedlichen Bewegungsstilen wechseln kann: dieser Einfluss wird unter anderem in \cite{Goodfellow-et-al-2016, kormushevReinforcementLearningRobotics2013} beschrieben
+\end{itemize}
+
+Besonders deutlich wird dieser Konflikt in den visuellen Beobachtungen: Zwar waren vereinzelte Sprungversuche zu erkennen, jedoch ohne gezielte Ausrichtung auf das Hindernis. Die Landungen erfolgten dabei noch einigermaßen kontrolliert. Dennoch dominieren stabilitätsorientierte Strategien wie das Ausweichen oder der Versuch, das Hindernis zu erklimmen, was darauf hindeutet, dass die Policy keine konsistente Sprungstrategie entwickelt hat.
+
+\section{Praktische Relevanz und Ausblick}
+% TODO Umformulieren
+Aus den Ergebnissen dieser Arbeit lassen sich mehrere Ansatzpunkte für zukünftige Arbeiten ableiten.
+Für die Interaktionsumgebung wäre eine gezieltere Gestaltung der Belohnungsfunktion vielversprechend, um Reward-Hacking zu vermeiden und die vollständige Gestenausführung zu fördern. Konkret könnte eine sequenzielle Belohnungsstruktur eingesetzt werden, die einzelne Phasen der Geste separat belohnt und erst bei vollständiger Ausführung die maximale Belohnung vergibt. Zusätzlich könnte Imitation Learning oder Behavior Cloning mit Experten-Demonstrationen eingesetzt werden, um der Policy ein konkretes Zielbewegungsmuster vorzugeben und das Explorationsproblem zu umgehen. Eine realistischere Modellierung der menschlichen Hand sowie der Kontaktdynamiken würde zudem den Transfer auf reale Szenarien verbessern. \newline
+Für die Navigationsumgebung wären für das erfolgreiche Erlernen von Sprungbewegungen mehrere Anpassungen vielversprechend: Ein explizit auf Springen ausgerichtetes Reward Shaping mit dichteren Zwischenschritten könnte das Explorationsproblem reduzieren. Ergänzend dazu wären zusätzliche Curriculum-Zwischenstufen – beispielsweise das Erlernen kleiner Hüpfer oder das schrittweise Anheben des Körpers – sinnvoll, um die Policy graduell an explosive Bewegungen heranzuführen. Eine Reinitialisierung der Netzwerkgewichte oder eine Anpassung der Netzwerkarchitektur zu Beginn der Sprungstufe könnte den hemmenden Einfluss der zuvor erlernten Stabilitätsprinzipien verringern. Schließlich stellen alternative Lernstrategien wie Imitation Learning oder Behavior Cloning mit Experten-Demonstrationen einen vielversprechenden Ansatz dar, um die präzise Gelenkkoordination für Sprungbewegungen effizienter zu erlernen.
+Übergreifend würde eine Validierung der trainierten Policies auf dem physischen Go2-Roboter den praktischen Nutzen der Ergebnisse erheblich stärken. Der Sim-to-Real-Transfer stellt dabei eine zentrale Herausforderung dar, da Unterschiede zwischen Simulation und realer Physik – wie Reibung, Motorträgheit oder Sensorungenauigkeiten – das erlernte Verhalten beeinträchtigen können. Techniken wie Domain Randomization oder Sim-to-Real-Adaptionsverfahren könnten diesen Transfer erleichtern. Ebenso würden systematisches Hyperparameter-Tuning sowie eine größere Anzahl von Seeds die Robustheit und Reproduzierbarkeit der Ergebnisse weiter verbessern.

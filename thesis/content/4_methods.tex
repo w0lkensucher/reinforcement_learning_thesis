@@ -11,24 +11,38 @@ In der Simulation erhält der Go2-Roboter Beobachtungen über seine Gelenkpositi
 Die Implementierung der Simulationsumgebung basiert auf einer Beispielumgebung für den Go2 Unitree des Genesis-Frameworks \cite{authorsGenesisGenerativeUniversal2024}, welche im Rahmen dieser Arbeit umfassend angepasst und erweitert wurde. Insbesondere wurden Beobachtungs- und Aktionsraum sowie die Belohnungsstruktur an die jeweiligen experimentellen Anforderungen angepasst. Diese Modifikationen ermöglichen eine gezielte Untersuchung der Lernleistung und Robustheit des entwickelten Steuerungsansatzes unter kontrollierten Bedingungen.
 \section{Der Reinforcement-Learning-Algorithmus}
 Für das Training der Steuerungpolicies wird der PPO Algorithmus eingesetzt, welcher bereits in \autoref{PPO} erläutert wurde. Die Implementierung gleicht dem gegebenen Beispiel des Genesis-Frameworks \cite{authorsGenesisGenerativeUniversal2024}, dessen Hyperparameterauswahl sich ebenfalls daran orientieren. Die Wahl von PPO erfolgte aufgrund seiner Robustheit und weiten Verbreitung im Bereich er kontinuierlichen Steuerungsaufgaben.
+
 \section{Belohnungsfunktionen} \label{reward_functions}
+
 Die Gestaltung der Belohnungsfunktionen spielt eine zentrale Rolle für den Lernerfolg im Reinforcement Learning. In dieser Arbeit wurden die Belohnungsfunktionen jeweils spezifisch an die Anforderungen der unterschiedlichen Aufgabenstellungen angepasst, um ein zielgerichtetes und stabiles Lernverhalten zu fördern.
 
 Für die Navigationsaufgabe wurde die Belohnung so gestaltet, dass das Erreichen des Ziels maximiert und gleichzeitig unerwünschtes Verhalten, wie Kollisionen mit Hindernissen oder ineffiziente Bewegungen, minimiert wird. Die Belohnungsfunktionen setzt sich aus mehreren Komponenten zusammen:
 \begin{itemize}
-	\item \textbf{Zielannäherung:} Für die Verringerung der Distanz zum Ziel in jedem Zeitschritt wird eine positive Belohnung vergeben.
+	\item \textbf{Zielannäherung:} Für die Verringerung der Distanz zum Ziel in jedem Zeitschritt wird eine positive Belohnung vergeben
 	\item \textbf{Zielerreichung:} Das Erreichen des Ziels wird mit einer hohen, einmaligen Belohnung verstärkt.
-	\item \textbf{Kollisionen:} Kollisionen mit Hindernissen oder das Verlassen des erlaubten Bereichs werden mit einer negativen Belohnung bestraft.
+	\item \textbf{Kollisionen:} Kollisionen mit Hindernissen oder das Verlassen des erlaubten Bereichs werden mit einer negativen Belohnung bestraft
 	\item \textbf{Stabilität:} Instabile Körperhaltungen oder Stürze führen zu einer zusätzlichen negativen Belohnung.
+	\item \textbf{Sprung - Annäherung:} In der Sprung-Stufe wird die Annäherung des Roboters zum Hindernis deutlich stärker gewichtet, um das Erkunden von Sprungkonfigurationen zu fördern
+	\item \textbf{Sprung - Absprung:} Der Übergang von der Standhaltung zur Flugphase wird belohnt, um die aktive Sprungbewegung zu verstärken
+	\item \textbf{Sprung - Flugphase:} Die Dauer der Flugphase wird belohnt, wobei diese Komponente strukturbedingt deutlich weniger gewichtet ist (1/200--1/400 der Gesamtrendite) wegen fehlender aktiver Kontrolle in der Luft
 \end{itemize}
-Für die Interaktionsumgebung (z.B. Streicheln) wurde die Belohnungsfunktion so gestaltet, dass gezielt die erfolgreiche Kontaktaufnahme und das Halten des Kontakts mit dem Zielobjekt (z.B. einer menschlichen Hand) belohnt werden. Hierzu zählen:
+
+Für die Interaktionsumgebung (z.B. Streicheln) wurde die Belohnungsfunktion so gestaltet, dass gezielt die erfolgreiche Kontaktaufnahme und das Halten des Kontakts mit dem Zielobjekt (z.B. einer menschlichen Hand), in dieser Arbeit repräsentiert durch eine Kugel, belohnt werden. Hierzu zählen:
 \begin{itemize}
 	\item \textbf{Kontaktaufnahme:} Das erstmalige Herstellen eines Kontakts mit dem Zielobjekt wird positiv verstärkt.
 	\item \textbf{Kontaktdauer:} Das Halten des Kontakts über mehrere Zeitschritte wird mit einer kontinuierlichen Belohnung versehen.
 	\item \textbf{Sanftheit:} Zu hohe Kontaktkräfte werden durch einen Strafterm sanktioniert, um ein sanftes Verhalten zu fördern.
 \end{itemize}
 
-Die Gewichtung der einzelnen Komponenten wurde empirisch bestimmt und im Verlauf der Experimente ggf. angepasst, um ein möglichst natürliches und robustes Verhalten des Roboters zu erzielen. Die genaue mathematische Formulierung der Belohnungsfunktionen und dessen Implementierung in Python ist in ??? und \autoref{reward_function_implementation} dokumentiert. % TODO Referenz ergänzen
+Die Gewichtung der einzelnen Komponenten wurde empirisch bestimmt und im Verlauf der Experimente ggf. angepasst, um ein möglichst natürliches und robustes Verhalten des Roboters zu erzielen. Die genaue mathematische Formulierung der Belohnungsfunktionen, dessen Implementierung in Python und deren Gewichtungen ist in ??? dokumentiert bzw. unter https://github.com/w0lkensucher/reinforcement\_learning\_thesis verfügbar.
+
+\section{Netzwerk-Architektur}
+
+Für die Implementierung der Policy und Value-Netzwerke wurden vollständig verbundene neuronale Netzwerke verwendet, bei dem beide Netzwerke bestehen aus zwei Hidden Layern mit jeweils 256 Neuronen, aktiviert durch ReLU-Funktionen. Die Ausgabeschicht ist jeweils linear ohne Aktivierungsfunktion.
+
+Die Policy gibt kontinuierliche Aktionen, also Drehmomente für die 12 Gelenke, aus und verwendet eine Gaußsche Normalverteilung mit trainierten Varianzparametern. Das Value-Netzwerk schätzt den Erwartungswert der kumulierten Belohnung.
+
+Diese Architektur orientiert sich an den Standardimplementierungen im Genesis-Framework \cite{authorsGenesisGenerativeUniversal2024} und bietet einen ausreichenden Kompromiss zwischen Modellflexibilität und Trainingsstabilität für kontinuierliche Steuerungsaufgaben.
 
 \section{Die Trainingsstrategie}
 Um den Lernprozess des Roboters effizienter und stabiler zu gestalten, wurde für die Navigationsaufgabe ein Curriculum-Learning-Ansatz implementiert. Dabei werden die Trainingsumgebungen und Aufgabenstellungen schrittweise in ihrer Komplexität gesteigert.
@@ -41,11 +55,17 @@ Die verschiedenen Stufen sind aufeinander aufgebaut:
 \end{itemize} 
 Jede Curriculum-Stufe ist so gestaltet, dass sie auf den in der vorherigen Stufe erworbenen Fähigkeiten aufbaut. Der Übergang zur nächsten Stufe erfolgt, sobald der Roboter in der aktuellen Stufe eine definierte Erfolgsrate erreicht, und wird manuell durchgeführt. Durch dieses stufenweise Vorgehen wird eine bessere Generalisierung und Robustheit des gelernten Verhaltens ermöglicht. In der letzten Stufe, dem Erlernen der Sprungfähigkeit, wird zusätzlich während des Trainings die Höhe des Hindernisses stückweise erhöht nach konsistenter Bewältigung des Hindernisses.
 
-Die Gewichtung der Belohnungen in den einzelnen Stufen ist in ??? dokumentiert.
+In der Interaktionsumgebung wurde derselbe Curriculum-Ansatz angewandt: Nach dem initialen Stabilitätstraining (Stufe 1) trainierte die zweite Stufe den Roboter darauf, Kopfberührungen zu erkennen und mit einer Reaktionsgeste zu antworten. Diese Geste, bestehend aus koordinierten Bewegungen der Gelenke, sollte während der aktiven Berührung stattfinden und ein natürliches, sanftes Interaktionsverhalten demonstrieren. Das Training dieser Geste war darauf ausgerichtet, den Roboter dazu zu befähigen, menschliche Zuneigung zu erkennen und angemessen zu reagieren, ohne dabei seine Stabilität zu verlieren oder abrupte, unnatürliche Bewegungen auszuführen.
 
 \section{Versuchsaufbau und Evaluationsmetrik}
-Für die Evaluation der trainierten Policies wurden mehrere Trainingsläufe mit unterschiedlichen Zufallsinitialisierungen oder Seeds durchgeführt, um die Robustheit und Reproduzierbarkeit der Ergebnisse zu gewährleisten. Die Trainings wurden jeweils mit identischen Hyperparametern, aber verschiedenen Seeds gestartet. Nach Abschluss des Trainings erfolgte die Auswertung der Ergebnisse anhand der wichtigsten Metriken.
+Für die Evaluation der trainierten Policies wurden mehrere Trainingsläufe mit unterschiedlichen Zufallsinitialisierungen oder Seeds durchgeführt, um die Robustheit und Reproduzierbarkeit der Ergebnisse zu gewährleisten. Die Trainings wurden jeweils mit identischen Hyperparametern, aber verschiedenen Seeds gestartet. Nach Abschluss des Trainings erfolgte die Auswertung der Ergebnisse anhand der wichtigsten Metriken: dem Return, Episodenlänge, Entropie und der Curriculum-Stufe spezifischen Rewards.
 
-Als Evaluationsmetrik diente primär die visuelle Auswertung der Lernkurven (u.a. durchschnittlicher Return, Erfolgsrate, Kollisionen pro Episode) über alle Seeds hinweg. Die Ergebnisse wurden als Mittelwert und Standardabweichung über die verschiedenen Seeds dargestellt, um die Varianz und Stabilität des Lernverhaltens zu beurteilen. Zusätzlich wurden ausgewählte Episoden als Video aufgezeichnet, um das qualitative Verhalten des Roboters zu veranschaulichen.
+Der \textbf{Return}, wie in \autoref{ss:return_policy} beschrieben wird, ist die kumulierte Belohnung eines Trainings oder einer Episode. Die \textbf{Episodenlänge} beschreibt die Anzahl der Zeitschritte einer Episode, bis diese 
+durch erfolgreiche Zielerreichung oder Abbruchbedingung endet. Die \textbf{Entropie der Policy} 
+quantifiziert die Unsicherheit oder Variabilität der Aktion-Verteilung und ist ein Maß für 
+die Exploration des Agenten. \textbf{Spezifische Rewards} sind einzelne Komponenten der 
+Belohnungsfunktion (z.B. Zielannäherung, Stabilität), die separat ausgewertet werden.
+
+Da die quantitativen Metriken stark von der Skalierung der Teilbelohnungen abhängen und nur bedingt auf das tatsächliche Verhalten des Roboters schließen lassen, diente als primäre Evaluationsmethode die visuelle Auswertung aufgezeichneter Episoden. Die Lernkurven wurden als Mittelwert und Standardabweichung über die verschiedenen Seeds dargestellt, um die Varianz und Stabilität des Lernverhaltens zu beurteilen. Zusätzlich wurden ausgewählte Episoden als Video aufgezeichnet, um das qualitative Verhalten des Roboters zu veranschaulichen.
 
 Diese Vorgehensweise ermöglicht eine umfassende Bewertung der Lernleistung und der Robustheit der trainierten Policies unter realitätsnahen Bedingungen.

@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
@@ -8,7 +9,7 @@ TAGS = [
     'Episode/rew_reward',
     'Train/mean_episode_length',
     'Loss/entropy',
-    'Episode/rew_tracking_lin_vel'
+    'Episode/rew_flexible_height',
 ]
 
 def extract_scalars(logdir, tags):
@@ -26,7 +27,7 @@ def extract_scalars(logdir, tags):
             data[tag] = ([], [])
     return data
 
-def plot_multiple_logs(logdirs, tags):
+def plot_multiple_logs(logdirs, tags, start_step=None, end_step=None):
     # Save plots in thesis/figures directory relative to the project root
     project_root = os.path.dirname(os.path.abspath(__file__))
     plots_dir = os.path.join(project_root, 'thesis', 'figures')
@@ -47,6 +48,18 @@ def plot_multiple_logs(logdirs, tags):
                 label = logdir_base
             data = extract_scalars(logdir, [tag])
             steps, values = data[tag]
+            
+            # Filter by step range
+            if steps and (start_step is not None or end_step is not None):
+                filtered = [(s, v) for s, v in zip(steps, values) 
+                           if (start_step is None or s >= start_step) 
+                           and (end_step is None or s <= end_step)]
+                if filtered:
+                    steps, values = zip(*filtered)
+                    steps, values = list(steps), list(values)
+                else:
+                    steps, values = [], []
+            
             if steps:
                 style = line_styles[idx % len(line_styles)]
                 plt.plot(steps, values, label=label, linewidth=1, linestyle=style)
@@ -62,9 +75,15 @@ def plot_multiple_logs(logdirs, tags):
     plt.show()
 
 def main():
-    if len(sys.argv) < 2:
+    parser = argparse.ArgumentParser(description='Plot TensorBoard scalars from log directories')
+    parser.add_argument('logdirs', nargs='*', help='Log directory names to plot')
+    parser.add_argument('--start-step', type=int, default=None, help='Start step for data filtering')
+    parser.add_argument('--end-step', type=int, default=None, help='End step for data filtering')
+    args = parser.parse_args()
+    
+    if not args.logdirs:
         # Search for all subdirectories in the logs directory
-        logs_dir = os.path.join('logs',os.path.dirname(__file__))
+        logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
         logdirs = [os.path.join(logs_dir, d) for d in os.listdir(logs_dir)
                   if os.path.isdir(os.path.join(logs_dir, d))]
         if not logdirs:
@@ -74,13 +93,17 @@ def main():
     else:
         logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
         logdirs = []
-        for arg in sys.argv[1:]:
+        for arg in args.logdirs:
             # If arg is absolute or already starts with logs/, use as is
             if os.path.isabs(arg) or arg.startswith(logs_dir) or arg.startswith('logs'):
                 logdirs.append(arg)
             else:
                 logdirs.append(os.path.join(logs_dir, arg))
-    plot_multiple_logs(logdirs, TAGS)
+    
+    if args.start_step is not None or args.end_step is not None:
+        print(f"Filtering data: start_step={args.start_step}, end_step={args.end_step}")
+    
+    plot_multiple_logs(logdirs, TAGS, args.start_step, args.end_step)
 
 if __name__ == "__main__":
     main()

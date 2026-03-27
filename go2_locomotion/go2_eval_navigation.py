@@ -104,7 +104,7 @@ def main():
         env_cfg["obstacle_density"] = 0.0
         env_cfg["terrain_size"] = [25.0, 25.0]
         env_cfg["obstacle_types"] = ["box"]
-        env_cfg["obstacle_height_range"] = [0.05, 0.15]
+        # Don't override height_range - let saved config (0.3m for stage 3) be used
         env_cfg["obstacle_width_range"] = [0.15, 0.3]
         env_cfg["obstacle_spacing_min"] = 2.0
         env_cfg["clear_radius"] = 3.0
