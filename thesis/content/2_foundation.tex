@@ -8,7 +8,7 @@ Goodfellow et al. \cite{Goodfellow-et-al-2016} nennen das \textbf{Deep Feedforwa
 \begin{equation}
 	y = f(x; \theta)
 \end{equation}
-definiert, wobei die Parameter ($\theta \text{ Gewichte } W \text{ und Biases } b$) so angepasst werden, dass sie die gewünschte Funktion bestmöglich approximieren \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Jede Schicht im Netzwerk führt eine affine Transformation, also eine Matrixmultiplikation und einer anschließende Translation, aus:
+definiert, wobei die Parameter ($\theta$, Gewichte $W$ und Biases $b$) so angepasst werden, dass sie die gewünschte Funktion bestmöglich approximieren \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Jede Schicht im Netzwerk führt eine affine Transformation, also eine Matrixmultiplikation und eine anschließenden Translation, aus:
 \begin{equation}
 	h = g(W\cdot x + b)
 \end{equation}
@@ -16,14 +16,23 @@ wobei $g$ eine nichtlineare Aktivierungsfunktion darstellt \cite{Goodfellow-et-a
 
 In modernen Architekturen hat sich die Rectified Linear Unit oder \textbf{ReLU}, definiert als 
 \begin{equation}
-	f(z) = max(0, z)
+	f(z) = \max(0, z)
 \end{equation}
-als Standard für Aktivierungsfunktionen etabliert, da sie die Optimierung mittels Gradientenabstieg beschleunigt und biologisch inspirierte Eigenschaften besitzt \cite{Goodfellow-et-al-2016}. 
+als Standard für Aktivierungsfunktionen etabliert, da sie die Effizienz des Trainings erhöht und biologisch inspirierte Eigenschaften besitzt \cite{Goodfellow-et-al-2016}. 
 \subsubsection{Optimierung durch Backpropagation}
-Das Training tiefer Netze erfolgt durch die Minimierung einer Kostenfunktion, welche die Abweichung zwischen den Vorhersagen des Netzes und den Zielwerten misst \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Der entscheidende Algorithmus hierfür ist die \textbf{Backpropagation}, bei dem die Kettenregel der Differentialrechnung genutzt wird, um, wie in \cite{Goodfellow-et-al-2016} und \cite{francois-lavetIntroductionDeepReinforcement2018} beschrieben, den Gradienten der Kostenfunktion in Bezug auf jedes Gewicht im Netzwerk effizient von der Ausgabeschicht zurück zu den Eingabeschichten zu berechnen. \newline
-Die Parameter werden anschließend durch Optimierungsverfahren aktualisiert. Goodfellow et al. \cite{Goodfellow-et-al-2016} und François-Lavet et al. \cite{francois-lavetIntroductionDeepReinforcement2018} nennen dabei unter anderem \textbf{stochastische Gradientenabstieg} oder dessen Varianten wie Adam oder RMSprop als verbreitete Optimierungsverfahren.
+Das Training tiefer Netze erfolgt durch die Minimierung einer Kostenfunktion, welche die Abweichung zwischen den Vorhersagen des Netzes und den Zielwerten misst \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Der entscheidende Algorithmus hierfür ist die \textbf{Backpropagation}, bei der die Kettenregel der Differentialrechnung genutzt wird, um den Gradienten der Kostenfunktion in Bezug auf jedes Gewicht im Netzwerk effizient von der Ausgabeschicht zurück zu den Eingabeschichten zu berechnen \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018}. Bezeichnet $J$ die Kostenfunktion, $h^{(l)}$ den Aktivierungsvektor und $W^{(l)}$ die Gewichtsmatrix der Schicht $l$ sowie $L$ die Ausgabeschicht, so ergibt sich der Gradient für die einzelnen Schichten über die sukzessive Anwendung der Kettenregel \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018} zu
+\begin{equation}\label{eq:backprop}
+\frac{\partial J}{\partial W^{(l)}} = \frac{\partial J}{\partial h^{(l)}} \cdot \frac{\partial h^{(l)}}{\partial W^{(l)}}, \qquad
+\frac{\partial J}{\partial h^{(l)}} = \frac{\partial J}{\partial h^{(L)}} \prod_{k=l+1}^{L} \frac{\partial h^{(k)}}{\partial h^{(k-1)}} .
+\end{equation}
+\newline
+Die Parameter werden anschließend durch Optimierungsverfahren aktualisiert. Goodfellow et al. \cite{Goodfellow-et-al-2016} und François-Lavet et al. \cite{francois-lavetIntroductionDeepReinforcement2018} nennen dabei unter anderem \textbf{stochastische Gradientenabstieg} oder dessen Varianten wie Adam oder RMSprop als verbreitete Optimierungsverfahren. Beim (stochastischen) Gradientenabstieg \cite{Goodfellow-et-al-2016, francois-lavetIntroductionDeepReinforcement2018} wird der Parametervektor $\theta$ dabei iterativ in Richtung des negativen Gradienten der Kostenfunktion $J$ mit einer Lernrate $\eta > 0$ angepasst:
+\begin{equation}\label{eq:grad_descent}
+\theta \leftarrow \theta - \eta\,\nabla_\theta J(\theta)
+\end{equation}
+Adam und RMSprop modifizieren diese Update-Regel lediglich um eine adaptive, pro Parameter skalierte Lernrate.
 \section{Reinforcement Learning} \label{sec:rl_basics}
-Sutton und Barto beschreiben in \cite{sutton2018reinforcement} Reinforcement Learning als einen computergestützten Ansatz zum Verständnis und zur Automatisierung von zielgerichtetem Lernen und Entscheidungsfindung. Autonome Agenten interagieren dabei mit einer Umgebung und entdecken dabei optimale Verhaltensweisen \cite{silverRewardEnough2021, arulkumaranDRL2017, Kober_IJRR_2013}. Im Gegensatz zum überwachten Lernen erhält der Agent \textbf{keine direkten Zielvorgaben}, sondern muss, wie in \cite{sutton2018reinforcement} beschrieben wird, durch Trial-and-Error und verzögerten Belohnungssignalen lernen, welche Aktionen den größten Nutzen bringt und damit die Belohnungssignale maximiert.
+Sutton und Barto beschreiben in \cite{sutton2018reinforcement} Reinforcement Learning als einen computergestützten Ansatz zum Verständnis und zur Automatisierung von zielgerichtetem Lernen und Entscheidungsfindung. Autonome Agenten interagieren dabei mit einer Umgebung und entdecken dabei optimale Verhaltensweisen \cite{silverRewardEnough2021, arulkumaranDRL2017, Kober_IJRR_2013}. Im Gegensatz zum überwachten Lernen erhält der Agent \textbf{keine direkten Zielvorgaben}, sondern muss, wie in \cite{sutton2018reinforcement} beschrieben wird, durch Trial-and-Error und verzögerten Belohnungssignalen lernen, welche Aktionen den größten Nutzen bringen und damit die Belohnungssignale maximieren.
 \subsection{Der Markov-Entscheidungsprozess und dessen mathematische Formulierung} \label{MDP} 
 
 \begin{figure}[htbp]
@@ -31,14 +40,14 @@ Sutton und Barto beschreiben in \cite{sutton2018reinforcement} Reinforcement Lea
 	\includegraphics[width=0.75\textwidth]{figures/rl_diagram.png}
 	\caption{Interaktionen zwischen Agenten und Umgebung in einem Markov-Entscheidungsprozess in  \cite{sutton2018reinforcement}}
 \end{figure}
-Die mathematische Grundlage für Reinforcement learning bildet in der Regel ein Markov-Entscheidungsprozess oder \textbf{Markov Decision Process (MDP)}, wie von Sutton und Barto in \cite{sutton2018reinforcement} beschrieben wird. Formal wird ein MDP häufig als Tupel ($S, A, T, R, \gamma$) dargestellt \cite{francois-lavetIntroductionDeepReinforcement2018, skalseDefiningCharacterizingReward2025, moralesSurveyDeepLearning2021}. \newline
+Die mathematische Grundlage für Reinforcement Learning bildet in der Regel ein Markov-Entscheidungsprozess oder \textbf{Markov Decision Process (MDP)}, wie von Sutton und Barto in \cite{sutton2018reinforcement} beschrieben wird. Formal wird ein MDP häufig als Tupel ($S, A, T, R, \gamma$) dargestellt \cite{francois-lavetIntroductionDeepReinforcement2018, skalseDefiningCharacterizingReward2025, moralesSurveyDeepLearning2021}. \newline
 Dieses Tupel setzt sich zusammen aus:
 \begin{itemize}
 	\item Dem Zustandsraum oder \textbf{State Space} $S$, welcher eine endliche oder kontinuierliche Menge aller möglichen Zustände der Umgebung beschreibt 
-	\item Dem Aktionsraum oder \textbf{Action Space}, welche die Menge der Aktionen ist, die dem Agenten zu Verfügung stehen
-	\item Einer Übergangsfunktion oder \textbf{Transition Dynamics} $T$, welche die Wahrscheinlichkeit $P(s'|s, a)$ angibt, bei einer Aktion a von Zustand s in Zustand s' zu gelangen
-	\item Einer Belohnungsfunktion oder \textbf{Reward Function} $R$, welche die Beschreibung einer skalaren Belohnung mit Funktion $R(s, a, s')$ ist, und als unmittelbares Feedback für den Agenten bei einem Zustandsübergang dient
-	\item Dem \textbf{Discount Factor} $\gamma$ , welcher ein Wert $\in [0, 1)$ ist, und die Gewichtung zukünftiger Belohnungen im Vergleich zu sofortigen Belohnungen reguliert
+	\item Dem Aktionsraum oder \textbf{Action Space}, welcher die Menge der Aktionen ist, die dem Agenten zur Verfügung stehen
+	\item Einer Übergangsfunktion oder \textbf{Transition Dynamics} $T$, welche die Wahrscheinlichkeit $P(s'|s, a)$ angibt, bei einer Aktion $a$ von Zustand $s$ in Zustand $s'$ zu gelangen
+	\item Einer Belohnungsfunktion oder \textbf{Reward Function} $R$, welche die Beschreibung einer skalaren Belohnung über die Funktion $R(s, a, s')$ liefert und als unmittelbares Feedback für den Agenten bei einem Zustandsübergang dient
+	\item Dem \textbf{Discount Factor} $\gamma$, welcher ein Wert $\in [0, 1)$ ist und die Gewichtung zukünftiger Belohnungen im Vergleich zu sofortigen Belohnungen reguliert
 \end{itemize}
 
 Ein zentrales Konzept dabei ist die \textbf{Markov-Eigenschaft}, welche in der grundlegenden Darstellung von Reinforcement Learning bei Sutton und Barto formuliert wird und in der späteren Literatur weitgehend übernommen wurde \cite{sutton2018reinforcement, francois-lavetIntroductionDeepReinforcement2018, arulkumaranDRL2017}. Diese Eigenschaft beschreibt, dass die Übergangswahrscheinlichkeit in einen zukünftigen Zustand \textbf{ausschließlich} vom aktuellen Zustand abhängt und nicht von der vollständigen Historie vorheriger Zustände.
@@ -48,25 +57,25 @@ Der Agent verfolgt das Ziel, eine Policy $\pi$ zu erlernen, die jedem Zustand ei
 	G_t = \sum_{k=0}^{\infty}\gamma^k R_{t+k+1}
 \end{equation}
 \subsection{Wertfunktionen und die Bellman-Gleichungen}
-Sutton und Barto benennen in \cite{sutton2018reinforcement} \textbf{Wertfunktionen} als zentrales Element von Reinforcement Learning, da sie dazu dienen, den langfristigen Nutzen von Zuständen oder Zustands-Aktions-Paaren mathematisch zu quantifizieren. Die \textbf{State-Value Funktion} $V^{\pi}(s)$ beschreibt dabei den erwarteten Return, wenn ein Agent in einem Zustand $s$ startet und darauffolgend einer Policy $\pi$ folgt. Darüber hinaus bewertet die Action-Value Function $Q^{\pi}(s, a)$ dem Wert der Ausführung einer spezifischen Aktion $a$ in einem Zustand $s$, wobei danach ebenfalls die Policy $\pi$ befolgt wird. \newline
-Das  Kerniel ist dabei, beschrieben von Sutton und Barto in \cite{sutton2018reinforcement}, das Erlernen einer optimalen Wertfunktion $V*$ oder $Q*$, welche den erreichbaren Return über alle möglichen Policies hinweg repräsentiert.
+Sutton und Barto benennen in \cite{sutton2018reinforcement} \textbf{Wertfunktionen} als zentrales Element von Reinforcement Learning, da sie dazu dienen, den langfristigen Nutzen von Zuständen oder Zustands-Aktions-Paaren mathematisch zu quantifizieren. Die \textbf{State-Value Funktion} $V^{\pi}(s)$ beschreibt dabei den erwarteten Return, wenn ein Agent in einem Zustand $s$ startet und darauffolgend einer Policy $\pi$ folgt. Darüber hinaus bewertet die Action-Value Funktion $Q^{\pi}(s, a)$ den Wert der Ausführung einer spezifischen Aktion $a$ in einem Zustand $s$, wobei danach ebenfalls die Policy $\pi$ befolgt wird. \newline
+Das Kernziel ist dabei, beschrieben von Sutton und Barto in \cite{sutton2018reinforcement}, das Erlernen einer optimalen Wertfunktion $V^*$ oder $Q^*$, welche den erreichbaren Return über alle möglichen Policies hinweg repräsentiert.
 
 Neben MDP, welches in \autoref{MDP} behandelt wurde, bilden die \textbf{Bellman-Gleichungen}, wie Sutton und Barto in \cite{sutton2018reinforcement} beschreiben, das formale Fundament für die Berechnungen dieser Funktionen, indem sie eine rekursive Beziehung zwischen dem Wert eines aktuellen Zustands und dem Wert seiner Nachfolgezustände herstellen. Für eine gegebene Policy $\pi$ beschreiben Sutton und Barto in \cite{sutton2018reinforcement} die Gleichung wie folgt:
 \begin{equation}
 	V^{\pi}(s) = \sum_{a}\pi(a|s)\sum_{s',r}p(s',r|s,a)[r+\gamma V^{\pi}(s')]
 \end{equation}
-Hierbei entspricht $p$ der \textbf{Übergangsdynamik der Umgebung}, während $r$ die \textbf{unmittelbare Belohnung} darstellt. Analog dazu beschreiben Sutton und Barto in \cite{sutton2018reinforcement} die \textbf{Bellman-Optimitätsgleichung} so, dass der Wert eines Zustands unter einer optimalen Policy dem erwarteten Return der besten verfügbaren Aktion entsprechen muss:
+Hierbei entspricht $p$ der \textbf{Übergangsdynamik der Umgebung}, während $r$ die \textbf{unmittelbare Belohnung} darstellt. Analog dazu beschreiben Sutton und Barto in \cite{sutton2018reinforcement} die \textbf{Bellman-Optimalitätsgleichung} so, dass der Wert eines Zustands unter einer optimalen Policy dem erwarteten Return der besten verfügbaren Aktion entsprechen muss:
 \begin{equation}
-	V^{\pi}(s) = \max_a\sum_{s',r}p(s',r|s,a)[r+\gamma V^{*}(s')]
+	V^{*}(s) = \max_a\sum_{s',r}p(s',r\mid s,a)[r+\gamma V^{*}(s')]
 \end{equation}
-Diese rekursive Struktur ermöglicht es Reinforcement Learning-Algorithmen, Schätzungen über die Zukunft durch vorherige Schätzungen schrittweise zu verfeinern, ohne den gesamten weitern Pfad abwarten zu müssen \cite{sutton2018reinforcement, arulkumaranDRL2017}.
+Diese rekursive Struktur ermöglicht es Reinforcement Learning-Algorithmen, Schätzungen über die Zukunft durch vorherige Schätzungen schrittweise zu verfeinern, ohne den gesamten weiteren Pfad abwarten zu müssen \cite{sutton2018reinforcement, arulkumaranDRL2017}.
 \subsection{Algorithmische Ansätze} \label{algo_rl}
 Algorithmische Ansätze in Reinforcement Learning werden von Sutton und Barto in \cite{sutton2018reinforcement} primär in zwei Gruppen aufgeteilt: \textbf{modellbasierte} und \textbf{modellfreie} Ansätze. Modellbasierte Methoden versuchen, die Übergangsdynamik der Umgebung explizit zu lernen oder ein gegebenes Modell zu nutzen, um durch interne Planung zukünftige Zustände und Belohnungen vorherzusagen. Dies kann in Umgebungen mit hohen Interaktionskosten, in denen echte Umgebungs-Erfahrungen limitiert oder kostspielig sind, zur Steigerung der Sample-Effizienz führen \cite{arulkumaranDRL2017}. \newline
 Im Gegensatz dazu verzichten modellfreie Ansätze auf eine explizite Modellierung der Dynamik und lernen direkt aus der Trial-and-Error-Erfahrung, bei denen Sutton und Barto weiter differenzieren zwischen \textbf{Value-based}, \textbf{Policy-based} oder \textbf{hybriden Actor-Critic-Methoden} \cite{sutton2018reinforcement}.
 
 Value-based-Verfahren konzentrieren sich auf die Schätzung von Wertfunktionen, welche den langfristigen Nutzen von Zuständen oder Aktionen unter der Verwendung der Bellman-Gleichung quantifizieren \cite{sutton2018reinforcement, ozalpAdvancementsDeepReinforcement2024}. \newline
-Policy-based-Methoden hingegen optimieren die Parameter ein Policy direkt, ohne notwendigerweise eine Wertfunktion als Zwischenschritt zu berechnen \cite{sutton2018reinforcement, ozalpAdvancementsDeepReinforcement2024}. Algorithmen wie \textbf{TRPO} oder \textbf{PPO}, welches spezifisch in \autoref{PPO} näher behandelt wird, nutzen spezielle Mechanismen, um die Stabilität des Lernprozesses in hochdimensionalen oder kontinuierlichen Aktionsräumen zu gewährleisten \cite{ozalpAdvancementsDeepReinforcement2024, arulkumaranDRL2017}. \newline
-Hybride Actor-Critic-Methoden kombinieren diese Ansätze, bei dem ein \textit{Actor} die optimale Policy lernt, während ein \textit{Critic} die gewählten Aktionen des \textit{Actors} bewertet, und versucht, eine Wertfunktion zu approximieren \cite{sutton2018reinforcement, arulkumaranDRL2017}.
+Policy-based-Methoden hingegen optimieren die Parameter einer Policy direkt, ohne notwendigerweise eine Wertfunktion als Zwischenschritt zu berechnen \cite{sutton2018reinforcement, ozalpAdvancementsDeepReinforcement2024}. Algorithmen wie \textbf{TRPO} oder \textbf{PPO}, welche in \autoref{ss:PPO} näher behandelt werden, nutzen spezielle Mechanismen, um die Stabilität des Lernprozesses in hochdimensionalen oder kontinuierlichen Aktionsräumen zu gewährleisten \cite{ozalpAdvancementsDeepReinforcement2024, arulkumaranDRL2017}. \newline
+Hybride Actor-Critic-Methoden kombinieren diese Ansätze, bei denen ein \textit{Actor} die optimale Policy lernt, während ein \textit{Critic} die gewählten Aktionen des \textit{Actors} bewertet, und versucht, eine Wertfunktion zu approximieren \cite{sutton2018reinforcement, arulkumaranDRL2017}.
 \section{Deep Reinforcement Learning als Erweiterung des Reinforcement Learning}
 Während klassische Reinforcement-Learning-Verfahren bei hochdimensionalen Zustands- und Aktionsräumen oft an ihre Grenzen stoßen, was Goodman et al. \cite{Goodfellow-et-al-2016} \textit{Fluch der Dimensionalität} nennen, zeigen Arulkumaran et al. in \cite{arulkumaranDRL2017}, dass Deep Learning eine effektive Lösung für dieses Problem bietet. Die Kombination der Entscheidungsfähigkeit von Reinforcement Learning mit der Wahrnehmungskapazität tiefer neuronaler Netze definiert das Forschungsfeld des Deep Reinforcement Learning oder \textbf{DRL} \cite{francois-lavetIntroductionDeepReinforcement2018, arulkumaranDRL2017, yuRewardModelsDeep2025}. \newline
 François-Lavet et al. \cite{francois-lavetIntroductionDeepReinforcement2018} und Arulkumaran et al. \cite{arulkumaranDRL2017} beschreiben, dass tiefe Netze in diesem Rahmen als Funktionsapproximatoren eingesetzt werden können. Dabei werden die optimale Policy oder Wertfunktion direkt aus komplexen Rohdaten, wie beispielsweise Kamerabildern oder Sensordatenströmen, approximiert \cite{levineEndtoEndTrainingDeep2016, mnihHumanlevelControlDeep2015}. \newline
@@ -76,23 +85,39 @@ Navigation und Mensch-Roboter-Interaktion, bildet.
 \subsection{Actor-Critic Methoden}
 Ein wesentlicher Bestandteil dieser Architektur ist das Lernsignal, das der Critic für die Aktualisierung der Policy liefert \cite{sutton2018reinforcement}. Sutton und Barto \cite{sutton2018reinforcement} sowie François-Lavet et al.  \cite{francois-lavetIntroductionDeepReinforcement2018} beschreiben, dass hierzu der \textit{Critic} den erwarteten Return eines Zustands schätzt und damit die Berechnung einer \textbf{Advantage-Funktion} ermöglicht, welche beschreibt, ob eine ausgeführte Aktion besser oder schlechter als erwartet war. Diese Bewertung dient anschließend als Grundlage für die Aktualisierung der Policy des \textit{Actors}. Durch dieses Zusammenspiel können Actor-Critic-Methoden stabilere und effizientere Lernprozesse erreichen als reine Policy-Gradient-Verfahren.
 
-Auf diesem strukturellem Fundament baut der \textbf{Proximal Policy Optimization} Algorithmus auf, welcher in diversen Arbeiten als \textit{Actor-Critic-Stil} geführt wird \cite{schulmanProximalPolicyOptimization2017, jinResilientLeggedLocal2023}.
-\subsection{Proximal Policy Optimization (PPO)} \label{PPO}
-Schulman et al. stellen in \cite{schulmanProximalPolicyOptimization2017} Proximal Policy Optimization oder PPO vor, welche eine Sammlung von Policy-Gradient-Methoden in Deep Reinforcement Learning ist und darauf abzielt, die Stabilität und Effizienz des Lernprozesses zu maximieren. \newline
+Auf diesem strukturellen Fundament baut der \textbf{Proximal Policy Optimization} Algorithmus auf, welcher in diversen Arbeiten als \textit{Actor-Critic-Stil} geführt wird \cite{schulmanProximalPolicyOptimization2017, jinResilientLeggedLocal2023}.
+\subsection{Proximal Policy Optimization (PPO)} \label{ss:PPO}
+Schulman et al. stellen in \cite{schulmanProximalPolicyOptimization2017} Proximal Policy Optimization oder PPO vor, welcher eine Sammlung von Policy-Gradient-Methoden in Deep Reinforcement Learning ist und darauf abzielt, die Stabilität und Effizienz des Lernprozesses zu maximieren. \newline
 Im Gegensatz zu klassischen Policy-Gradient-Verfahren zeichnet sich PPO dadurch aus, dass Aktualisierungen der Policy begrenzt werden, sodass diese nicht stark von der vorherigen Policy abweichen. Dadurch werden instabile Lernschritte vermieden, die bei großen Policy-Updates in klassischen Verfahren auftreten können \cite{schulmanProximalPolicyOptimization2017}.
 \subsubsection{Mathematisches Konzept und Clipping-Mechanismus}
-Der Kern von PPO ist ein spezielles \textbf{Surrogate Objective}, welches die Aktualisierung der Policy $\pi_{\theta_{dd}}$ reguliert \cite{schulmanProximalPolicyOptimization2017, francois-lavetIntroductionDeepReinforcement2018}. Ein Surrogate Objective oder Ersatzziel-Funktion gewichtet, wie Schulman et al. in \cite{schulmanProximalPolicyOptimization2017} beschreiben, die Änderungen der Policy durch das Verhältnis von neuer zu alter Aktionswahrscheinlichkeit ($\pi_{\theta_{dd}}$), welche durch die \textbf{Probability Ratio} $r_t(\theta)$ beschrieben wird:
+Der Kern von PPO ist ein spezielles \textbf{Surrogate Objective}, welches die Aktualisierung der Policy $\pi_\theta$ reguliert \cite{schulmanProximalPolicyOptimization2017, francois-lavetIntroductionDeepReinforcement2018}. Ein Surrogate Objective oder Ersatzziel-Funktion gewichtet, wie Schulman et al. in \cite{schulmanProximalPolicyOptimization2017} beschreiben, die Änderungen der Policy durch das Verhältnis von neuer zu alter Aktionswahrscheinlichkeit $\pi_\theta(a_t\mid s_t)\,/\,\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)$, welche durch die \textbf{Probability Ratio} $r_t(\theta)$ beschrieben wird:
 \begin{equation}
-	r_t(\theta) = \frac{\pi_{\theta(a_t|s_t)}}{\pi_{\theta_{dd}}(a_t|s_t)}
+\label{eq:ppo_probability_ratio}
+	r_t(\theta) = \frac{\pi_{\theta}(a_t\mid s_t)}{\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)}
 \end{equation}
-Große Schwankungen werden bei PPO mittels \textbf{Clipped Surrogate Objective} $L^{CLIP}$ verhindert, das die Probability Ratio innerhalb eines Intervalls $[1-\epsilon, 1+\epsilon]$ um 1 hält, wodurch übermäßige Policy-Updates 
-verhindert werden:
+Große Schwankungen werden bei PPO mittels \textbf{Clipped Surrogate Objective} $L^{CLIP}$ verhindert, das die Probability Ratio auf das Intervall $[1-\epsilon, 1+\epsilon]$ um 1 begrenzt, wodurch übermäßige Policy-Updates verhindert werden:
 \begin{equation}
-	L^{CLIP}(\theta) = \hat{\mathbb{E}_t}[\text{min}(r_t(\theta)\hat{A}_t), \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t]
+	L^{\mathrm{CLIP}}(\theta) = \hat{\mathbb{E}}_t\!\left[\min\!\left(r_t(\theta)\hat{A}_t,\operatorname{clip}\!\left(r_t(\theta),1-\epsilon,1+\epsilon\right)\hat{A}_t\right)\right]
 \end{equation}
 Dabei repräsentiert $\hat{A}_t$ die Advantage-Funktion, während $\epsilon$ mit der Ratio im Clipping zusammenhängt und typischerweise $0,2$ beträgt \cite{schulmanProximalPolicyOptimization2017}. 
 \subsubsection{Bedeutung für die Robotik}
-In der Robotik hat sich PPO als Standardalgorithmus etabliert, was vor allem an seiner Robustheit gegenüber Hyperparametern und der Fähigkeit, effektiv in hochdimensionalen, kontinuierlichen Aktionsräumen zu lernen, liegt \cite{tang, schwarke2025rslrllearninglibraryrobotics}. Außerdem können tausende Agenten durch PPO in parallelen Simulationen komplexe Bewegungsabläufe in kurzer Zeit lernen, dessen Ergebnisse durch die Stabilität des Clipping-Mechanismus zuverlässig auf reale physikalische Systeme transferiert werden können \cite{rudin2022learningwalkminutesusing, schwarke2025rslrllearninglibraryrobotics, tangDeepReinforcementLearning2024}.
+In der Robotik hat sich PPO als Standardalgorithmus etabliert, was vor allem an seiner Robustheit gegenüber Hyperparametern und der Fähigkeit, effektiv in hochdimensionalen, kontinuierlichen Aktionsräumen zu lernen, liegt \cite{tangDeepReinforcementLearning2024, schwarke2025rslrllearninglibraryrobotics}. Zudem erlaubt PPO das massiv-parallele Training tausender simulierter Agenten, deren erlernte Verhaltensweisen durch die Stabilität des Clipping-Mechanismus zuverlässig konvergieren \cite{rudin2022learningwalkminutesusing, schwarke2025rslrllearninglibraryrobotics}.
+
+\subsubsection{Stochastik im Lernprozess, Zufalls-Seeds und Abgrenzung zu Domain Randomization}
+Deep-Reinforcement-Learning-Algorithmen sind durch multiple stochastische Quellen geprägt, die zu Varianzen zwischen verschiedenen Trainingsdurchläufen führen können \cite{hendersonDeepReinforcementLearning2019}:
+\begin{enumerate}
+	\item \textbf{Gewichtsinitialisierung:} Die Parameter $\theta_0$ des Policy- und Critic-Netzwerks werden zu Beginn des Trainings zufällig initialisiert (z.\,B. orthogonale Initialisierung oder Xavier/Glorot).
+	\item \textbf{Explorationsstochastik:} In kontinuierlichen Aktionsräumen parametrisiert das Policy-Netzwerk den Mittelwert $\mu_\theta(s_t)$ und die Standardabweichung $\sigma_\theta(s_t)$ einer Gauß-Verteilung, aus der Aktionen stochastisch abgetastet werden: $\mathbf{a}_t \sim \mathcal{N}(\mu_\theta(s_t), \Sigma_\theta(s_t))$.
+	\item \textbf{Umgebungsresets:} Startpositionen, Hindernislagen und initiale Geschwindigkeiten werden bei Episodenbeginn stochastisch festgelegt.
+\end{enumerate}
+
+Um die Reproduzierbarkeit zu quantifizieren und zufallsbedingte Scheinerfolge von echten Leistungsgewinnen zu trennen, ist die Durchführung mehrerer Trainingsläufe mit unterschiedlichen \textbf{Zufalls-Seeds} unerlässlich \cite{hendersonDeepReinforcementLearning2019}. 
+
+Hierbei ist eine strikte begriffliche und methodische Trennung zur \textbf{Domain Randomization} erforderlich:
+\begin{itemize}
+	\item \textbf{Zufalls-Seeds:} Dienen der statistischen Absicherung und Überprüfung der Trainingsstabilität unter identischen physikalischen Umgebungsbedingungen.
+	\item \textbf{Domain Randomization:} Dient der Robustheitssteigerung gegenüber Modellierungsfehlern für den Sim-to-Real-Transfer, indem physikalische Parameter (wie Bodenreibung, Aktuatordämpfung, Robotermasse und Sensorverzögerungen) während des Trainings bewusst mit Störgrößen angereichert werden, sodass die Policy eine invariante Kontrollstrategie über eine breite Familie von Systemdynamiken lernt \cite{hwangboLearningAgileDynamic2019, rudin2022learningwalkminutesusing}.
+\end{itemize}
 
 \section{Grundlagen der quadrupeden Lokomotion}
 \subsection{Morphologie und Kinematik}
@@ -106,40 +131,53 @@ Ein Standard-Quadruped verfügt in der Regel über 12 aktive Gelenke, was drei F
 Hierbei steht $q_{HAA}$ für die Hüftabduktion/-adduktion, $q_{HFE}$ für die Hüftflexion/-extension und $q_{KFE}$ für die Knieflexion/-extension \cite{hwangboLearningAgileDynamic2019, hutterANYmalHighlyMobile2016}. Moderne Plattformen wie dem ANYmal, zu sehen in \autoref{fig:anymal}, zeichnen sich durch die Integration von Gelenk-Offsets aus, die eine volle Rotation erlauben und somit den Arbeitsraum massiv vergrößern \cite{hutterANYmalHighlyMobile2016}.
 
 \subsubsection{Kinematik und Koordinatentransformationen}
-Die Kinematik beschreibt die mathematische Beziehung zwischen den Gelenkzuständen und der resultierenden Position der Endeffektoren im Raum. Die Inverse Kinematik wird unter anderem genutzt, um geplante Trajektorien aus dem kartesischen Arbeitsraum in spezifische Zielgelenkwinkel abzubilden \cite{bussolaGuidedReinforcementLearning2025, yinRunDogLearning2021}, oder räumliche Trajektorien auf verschiedene Roboter-Morphologien zu übertragen \cite{bussolaGuidedReinforcementLearning2025}. \newline
-Neben den kartesischen Weltkoordinatensystem werden in der Robotik verschiedene weiter Koordinatensysteme verwendet, dessen Beziehungen durch eine Koordinatentransformation beschrieben werden können; darunter fallen unter anderem z.B. das Körperkoordinatensystem oder Inertialsystem bei einem Roboter \cite{hwangboLearningAgileDynamic2019, yinRunDogLearning2021}. Dessen Ausrichtung wird häufig über eine Inertial Measurement Unit oder IMU erfasst, welche die Richtung des Schwerkraftsvektors $\phi_g$ im lokalen IMU-Frame bestimmt \cite{hwangboLearningAgileDynamic2019}. 
+Die Kinematik beschreibt die mathematische Beziehung zwischen Gelenkzuständen und der resultierenden Position der Endeffektoren im Raum. Im Robotersystem werden verschiedene Koordinatensysteme verwendet: das kartesische Weltkoordinatensystem für Umgebungsdarstellung und das Körperkoordinatensystem für Roboter-interne Berechnungen \cite{hwangboLearningAgileDynamic2019}. Die Körperorientierung wird durch einen IMU-Sensor erfasst, der die relative Ausrichtung zur Schwerkraft bestimmt \cite{hwangboLearningAgileDynamic2019}.
 
-Die Körperhaltung werden dabei oft mit Euler-Winkel als Roll, Pitch und Yaw (oder in Winkeln $\alpha, \beta, \gamma$) beschrieben, welche aneinanderreihende Rotationen um die Koordinatenachsen beschreibt \cite{Siciliano2016Handbook}. Die Rotationsmatrix der gängigen Z-Y-X Konvention wird beispielsweise als Produkt von Einzelrotationen (vgl. \cite{Siciliano2016Handbook}):
+Die räumliche Orientierung des Basiskörpers wird im fahrzeugfesten Koordinatensystem üblicherweise über die drei \textbf{Euler-Winkel} (Roll-, Nick- und Gierwinkel bzw. $\phi, \theta, \psi$) beschrieben, welche aufeinanderfolgende elementare Drehungen um die Hauptachsen des Koordinatensystems darstellen \cite{Siciliano2016Handbook}:
+\begin{itemize}
+	\item \textbf{Rollwinkel ($\phi$):} Rotation um die fahrzeugfeste X-Längsachse (Wanken nach links/rechts).
+	\item \textbf{Nickwinkel ($\theta$):} Rotation um die Y-Querachse (Kippen nach vorn/hinten).
+	\item \textbf{Gierwinkel ($\psi$):} Rotation um die vertikale Z-Hochachse (Drehung um die eigene Achse).
+\end{itemize}
+Die resultierende Rotationsmatrix $R(\psi, \theta, \phi)$ in der gängigen Z-Y-X-Konvention berechnet sich als Produkt der Elementarrotationen (vgl. \cite{Siciliano2016Handbook}):
 \begin{equation}
-	R(\alpha, \beta, \gamma) = R_z(\alpha)R_y(\beta)R_z(\gamma)
+	R(\psi, \theta, \phi) = R_z(\psi) R_y(\theta) R_x(\phi)
 \end{equation} 
-berechnet mit:
+mit den standardisierten Rotationsmatrizen:
 \begin{equation}
-\tiny
-	R_z(\alpha) = 
+\small
+	R_z(\psi) = 
 	\begin{bmatrix}
-		\cos(\alpha) & -\sin(\alpha) & 0 \\
-		\sin(\alpha) & \cos(\alpha) & 0 \\
+		\cos(\psi) & -\sin(\psi) & 0 \\
+		\sin(\psi) & \cos(\psi) & 0 \\
 		0 & 0 & 1
-	\end{bmatrix}, 
-	R_y(\beta) = 
+	\end{bmatrix}, \quad
+	R_y(\theta) = 
 	\begin{bmatrix}
-		\cos(\beta) & 0 & \sin(\beta) \\
+		\cos(\theta) & 0 & \sin(\theta) \\
 		0 & 1 & 0 \\
-		-\sin(\beta) & 0 & \cos(\beta)
-	\end{bmatrix}, 
-	R_x(\gamma) = 
+		-\sin(\theta) & 0 & \cos(\theta)
+	\end{bmatrix}, \quad
+	R_x(\phi) = 
 	\begin{bmatrix}
 		1 & 0 & 0 \\
-		0 & \cos(\gamma) & -\sin(\gamma) \\
-		0 & \sin(\gamma) & \cos(\gamma)
+		0 & \cos(\phi) & -\sin(\phi) \\
+		0 & \sin(\phi) & \cos(\phi)
 	\end{bmatrix}
 \normalsize
 \end{equation}
-Um die Euler-Winkel aus einer gegebenen Rotationsmatrix $R = [r_i{ij}]$ zu berechnen, verwendet man die Beziehung der Matrix und den Standard-Eulerwinkeldefinitionen, bei denen man die inverse trignometrische Funktionen der Rotationsmatrizen berechnet \cite{Siciliano2016Handbook}. \newline
-Bei bestimmten Winkelstellungen, insbesondere wenn der Pitch $\pm90\circ$ beträgt, treten sogenannte Singularitäten auf, welche zum Gimbal Lock führen, bei dem zwei Rotationsachsen kollinear werden und ein Freiheitsgrad der Rotation verloren geht \cite{Siciliano2016Handbook}.
+Bei bestimmten Winkelkonstellationen – insbesondere wenn der Nickwinkel $\theta = \pm 90^\circ$ erreicht – tritt eine mathematische Singularität auf (\textbf{Gimbal Lock}) \cite{Siciliano2016Handbook}. Der zugrunde liegende Grund ist die parametrische Redundanz der Euler-Darstellung: Da es sich um die Hintereinanderausführung dreier Elementarrotationen handelt, fallen bei $\theta = \pm 90^\circ$ die Rotationsachsen der äußeren und inneren Elementarrotation zusammen (hier wird $R_y(\theta)$ zu einer $90^\circ$-Drehung, wodurch die auf sie folgende Roll- und die ihr vorausgehende Gierrotation in derselben Ebene liegen). In diesem Fall hängt die resultierende Rotationsmatrix nur noch von der Summe bzw. Differenz der beiden betroffenen Winkel ($\psi \pm \phi$) ab, nicht mehr von jedem einzelnen. Damit geht ein geometrischer Rotationsfreiheitsgrad verloren: Zwei der drei Euler-Winkel beschreiben dieselbe Rotationsvariation, und die Zuordnung zwischen Winkeltripel und Orientierung ist lokal nicht mehr eindeutig umkehrbar.
 
-Um diese Einschränkungen zu umgehen, weden in der Robotik häufig Quaternionen eingesetzt. Diese stellen Rotationen als vierdimensionale Vektoren 
+Für die Praxis bedeutet das: Liegt die Rumpforientierung eines Roboters nahe dieser Singularkonstellation, können kleine Orientierungsänderungen nicht mehr durch entsprechend kleine und eindeutige Änderungen der Euler-Winkel dargestellt werden. Dadurch werden Ableitungen, Inversionen und Interpolationen der Orientierung numerisch instabil, und Regelungs- oder Beobachteransätze, die direkt auf den Euler-Winkeln aufbauen, können in dieser Lage versagen. Genau dieses Verhalten motiviert den Einsatz von \textbf{Einheitsquaternionen} als alternativer, singularitätsfreier Darstellung.
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.5\textwidth]{figures/Kardanischer-Kompass.jpg}
+	\caption[Kardanischer Kompass und Gimbal Lock]{Illustration eines kardanischen Kompasses: Fällt eine Ringachse der kardanischen Aufhängung mit einer anderen zusammen, geht ein Rotationsfreiheitsgrad verloren (Gimbal Lock) \cite{wiki:gimbal_compass}}
+	\label{fig:gimbal_lock}
+\end{figure}
+
+Um diese Singularitäten zu vermeiden, werden in der Robotik und Regelungstechnik häufig \textbf{Einheitsquaternionen} eingesetzt. Eine Einheitsquaternion $q$ beschreibt eine Drehung um den Winkel $\varphi$ um die Einheitsachse $n=(n_x,n_y,n_z)^{\mathsf{T}}$ und wird zu \cite{Siciliano2016Handbook} als
 \begin{equation}
 	q = \begin{bmatrix}
 		q_0 \\
@@ -147,27 +185,21 @@ Um diese Einschränkungen zu umgehen, weden in der Robotik häufig Quaternionen 
 		q_2 \\
 		q_3
 	\end{bmatrix} = \begin{bmatrix}
-	\cos(\frac{\theta}{2}) \\
-	n_x\sin(\frac{\theta}{2}) \\
-	n_y\sin(\frac{\theta}{2}) \\
-	n_z\sin(\frac{\theta}{2})
-	\end{bmatrix} \text{\cite{Siciliano2016Handbook}}
+		\cos(\frac{\varphi}{2}) \\
+		n_x\sin(\frac{\varphi}{2}) \\
+		n_y\sin(\frac{\varphi}{2}) \\
+		n_z\sin(\frac{\varphi}{2})
+	\end{bmatrix}
 \end{equation}
-dar, wobei $\theta$ der Rotationswinkel um die Einheitsachse $n = (n_x, n_y, n_z)^T$ ist, und vermeiden Gimbal Lock, da sie kontinuierliche und eindeutige Repräsentationen jeder dreidimensionalen Drehung ermöglichen. Die Transformation von Euler-Winkeln in Quaternionen gewährleistet somit eine stabile und numerisch robuste Darstellung der Orientierung und werden mit dieser Umrechnungsformel transformiert (vgl. \cite{Diebel2006}):
+dargestellt. Diese Darstellung vermeidet Gimbal Lock, da sie eine kontinuierliche Repräsentation jeder dreidimensionalen Drehung ermöglicht, wobei die Repräsentation bis auf das Vorzeichen eindeutig ist: Eine Einheitsquaternion $q$ und ihr Negatives $-q$ beschreiben dieselbe Rotation. Die Transformation von Euler-Winkeln in Quaternionen gewährleistet eine stabile und numerisch robuste Darstellung der Orientierung und erfolgt mit folgender Umrechnungsformel (vgl. \cite{Diebel2006}):
 \begin{equation}
 \begin{aligned}
-	q_0 &= \cos(\frac{\alpha}{2})\cos(\frac{\beta}{2})\cos(\frac{\gamma}{2}) + \sin(\frac{\alpha}{2})\sin(\frac{\beta}{2})\sin(\frac{\gamma}{2}), \\
-	q_1 &= \sin(\frac{\alpha}{2})\cos(\frac{\beta}{2})\cos(\frac{\gamma}{2}) - \cos(\frac{\alpha}{2})\sin(\frac{\beta}{2})\sin(\frac{\gamma}{2}), \\
-	q_2 &= \cos(\frac{\alpha}{2})\sin(\frac{\beta}{2})\cos(\frac{\gamma}{2}) + \sin(\frac{\alpha}{2})\cos(\frac{\beta}{2})\sin(\frac{\gamma}{2}), \\
-	q_3 &= \cos(\frac{\alpha}{2})\cos(\frac{\beta}{2})\sin(\frac{\gamma}{2}) - \sin(\frac{\alpha}{2})\sin(\frac{\beta}{2})\cos(\frac{\gamma}{2})
+	q_0 &= \cos(\frac{\psi}{2})\cos(\frac{\theta}{2})\cos(\frac{\phi}{2}) + \sin(\frac{\psi}{2})\sin(\frac{\theta}{2})\sin(\frac{\phi}{2}), \\
+	q_1 &= \sin(\frac{\psi}{2})\cos(\frac{\theta}{2})\cos(\frac{\phi}{2}) - \cos(\frac{\psi}{2})\sin(\frac{\theta}{2})\sin(\frac{\phi}{2}), \\
+	q_2 &= \cos(\frac{\psi}{2})\sin(\frac{\theta}{2})\cos(\frac{\phi}{2}) + \sin(\frac{\psi}{2})\cos(\frac{\theta}{2})\sin(\frac{\phi}{2}), \\
+	q_3 &= \cos(\frac{\psi}{2})\cos(\frac{\theta}{2})\sin(\frac{\phi}{2}) - \sin(\frac{\psi}{2})\sin(\frac{\theta}{2})\cos(\frac{\phi}{2})
 \end{aligned}
 \end{equation}
 
-\begin{figure}[htbp]
-	\centering
-	\includegraphics[width=0.5\textwidth]{figures/Eulerangles.png}
-	\caption{Eulerwinkel-Illustration in \cite{wiki:eulerangles}}
-\end{figure}
-
 \subsection{Dynamik und Kontaktmodellierung}
-Die Simulation der quadrupeden Robotern basiert auf einem dynamischen Modell mit Berücksichtigung von Kontaktkräften zwischen Beinen und Untergrund, dessen Implementierung vollständig vom Framework übernommen wird \cite{authorsGenesisGenerativeUniversal2024} und in der Aufgabenstellung nicht näher betrachtet wird.
+Die Simulation der quadrupeden Roboter basiert auf einem dynamischen Modell mit Berücksichtigung der Kontaktkräfte zwischen Beinen und Untergrund. Deren Implementierung übernimmt das Simulationsframework vollständig \cite{authorsGenesisGenerativeUniversal2024}; eine eigenständige Modellierung ist nicht Teil der Aufgabenstellung.

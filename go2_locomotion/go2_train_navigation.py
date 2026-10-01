@@ -76,7 +76,7 @@ def get_navigation_train_cfg(exp_name, max_iterations):
         "num_steps_per_env": 48,  # Longer rollouts = cleaner value estimates = less noisy gradients
         "save_interval": 10,
         "empirical_normalization": None,
-        "seed": 1, # set to different seeds for multiple runs
+        "seed": 24, # set to different seeds for multiple runs
     }
 
 

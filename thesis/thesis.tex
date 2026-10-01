@@ -4,7 +4,7 @@
     a4paper,
     sfdefaults=false,
     toc=chapterentrywithdots,
-    twoside,openright,
+    twoside,openany,
     titlepage,
     parskip=half,
     headings=normal,  % reduces heading size
@@ -25,7 +25,7 @@
 \newcommand{\studiengang}{Elektrotechnik und Informationstechnik}  % {Informatik,Wirtschaftsinformatik,Medieninformatik}
 \newcommand{\matrikelnr}{3689804}
 \newcommand{\erstgutachter}{Prof.\,Dr. rer. nat.~Christian Pfitzner}
-\newcommand{\zweitgutachter}{Filler} % Filler
+\newcommand{\zweitgutachter}{Prof. Dr.-Ing. Bernhard Wagner} % Filler
 \newcommand{\logo}{figures/TH-Nuernberg-RGB.png}
 \newcommand{\keywords}{mobile_robotics, reinforcement_learning, locomotion, ai, deep_reinforcement_learning, simulation}
  
@@ -50,6 +50,8 @@
 \usepackage[T1]{fontenc}
 \usepackage{lmodern,relsize,textcomp,csquotes}
 \usepackage{amsmath,amsfonts}
+\usepackage{dsfont}
+\newcommand{\ind}{\mathds{1}}
 \usepackage[english, ngerman]{babel}  % flip for German thesis; original ngerman, english
 \usepackage[final]{graphicx}
 \usepackage{setspace,geometry,xcolor}
@@ -69,6 +71,7 @@
 \usepackage{array}
 \usepackage{ragged2e}
 \usepackage{lscape}
+\usepackage{booktabs}
 
 \usepackage[
 backend=biber,
@@ -144,7 +147,11 @@ style=ieee
 \setcounter{tocdepth}{2}  % ...but don't include them in toc
 
 \frontmatter
-\include{cover}\cleardoublepage
+\include{cover}
+\input{content/a0_ki_nutzung}
+\cleardoublepage
+
+% TODO Symbolbibliothek einfügen
 
 % download the following form (requires VPN) and complete it (hit save in your editor)
 % https://intern.ohmportal.de/fileadmin/Public_Docs/SB/SB_0009_FO_Pruefungsrechtliche_Erklaerung_und_Erklaerung_zur_Veroeffentlichung_der_Abschlussarbeit_public.pdf
@@ -164,23 +171,20 @@ style=ieee
 
 % remove if not needed
 \appendix
-% \include{content/a1_rewards_maths}
+\include{content/a1_rewards_maths}
+\include{content/a3_glossar}
 
 \backmatter
 \listoffigures
 \cleardoublepage
-
 \listoftables
-\cleardoublepage
-
-\renewcommand{\lstlistlistingname}{List of Listings}  % change for German thesis
-\lstlistoflistings
 \cleardoublepage
 
 % \bibliographystyle{wmaainf}
 % \bibliography{refs}
 
-\printnoidxglossaries								% TODO: Glossar erweitern (Policy zb)
+% Das Glossar ist als Anhang A.3 (content/a3_glossar.tex) eingebunden;
+% das redundante, ungenutzte Glossaries-Package-Glossar wird hier bewusst weggelassen.
 \printbibliography
 
 \end{document}

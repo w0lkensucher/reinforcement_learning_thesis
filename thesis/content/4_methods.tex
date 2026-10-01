@@ -1,71 +1,130 @@
 \chapter{Methodik}\label{ch:methods}
 
-In diesem Kapitel wird die methodische Vorgehensweise zur Untersuchung der Forschungsfrage vorgestellt. Ziel ist es, die Leistungsfähigkeit des entwickelten Reinforcement-Learning-Ansatzes für die Navigation eines Go2-Roboters in simulierten Umgebungen systematisch zu evaluieren. Dazu werden verschiedene Trainingsläufe mit unterschiedlichen Zufallsinitialisierungen (Seeds) durchgeführt, um die Robustheit und Reproduzierbarkeit der Ergebnisse zu gewährleisten. Zusätzlich wird ein Training mit reduzierter Modellgröße bzw. geringerer Komplexität durchgeführt, um den Einfluss der Modellkapazität auf die Lernleistung zu untersuchen.
+In diesem Kapitel wird die methodische Vorgehensweise zur Untersuchung der Forschungsfrage vorgestellt. Ziel ist es, die Leistungsfähigkeit des entwickelten Reinforcement Learning-Ansatzes für die zwei Aufgabenbereiche – Navigation eines Unitree Go2 Edu in simulierten Umgebungen sowie taktile Interaktion durch Kopfberührung – systematisch zu evaluieren. Dazu werden verschiedene Trainingsläufe mit unterschiedlichen Zufallsinitialisierungen (Seeds) durchgeführt, um die Robustheit und Reproduzierbarkeit der Ergebnisse zu gewährleisten.
 
 Die folgenden Abschnitte beschreiben zunächst die verwendete Simulationsumgebung und das Robotermodell, anschließend den eingesetzten Lernalgorithmus sowie die Gestaltung der Belohnungsfunktion und des Curriculums. Abschließend werden der konkrete Versuchsaufbau und die verwendeten Evaluationsmetriken erläutert.
-\section{Die Simulationsumgebung und das Robotermodell}
-Für die Durchführung der Experimente wird die Simulationsumgebung \textbf{Genesis} verwendet, eine auf physikalisch basierter Modellierung und effizienter Parallelisierung ausgelegte Plattform für robotische Anwendungen \cite{authorsGenesisGenerativeUniversal2024}. Genesis ermöglicht die realitätsnahe Nachbildung komplexer Umgebungen und unterstützt die Integration verschiedener Robotermodelle sowie die Simulation dynamischer Hindernisse. Als Roboterplattform kommt der \textbf{Go2} von Unitree Robotics \cite{unitreeGo2Unitree2023} zum Einsatz, ein vierbeiniger Laufroboter, der sich durch hohe Beweglichkeit und Stabilität auszeichnet. Das digitale Modell des Go2 bildet die kinematischen und dynamischen Eigenschaften des realen Roboters detailliert ab und erlaubt so eine praxisnahe Evaluierung der entwickelten Steuerungsalgorithmen. Aufgrund der im Genesis-Framework bereits vorhandenen Modelle des Go2 Unitree fiel die Entscheidung auf dieses Framework.
+\section{Die Simulationsumgebung Genesis und das Robotermodell}
+Für die Konzeption, das Training und die Evaluation der DRL-Policies wird die physikbasierte Simulationsplattform \textbf{Genesis} eingesetzt \cite{authorsGenesisGenerativeUniversal2024}. Die Wahl von Genesis gegenüber traditionellen Robotik-Simulatoren (wie Gazebo oder PyBullet) begründet sich durch spezifische architektonische und leistungstechnische Merkmale:
+\begin{enumerate}
+	\item \textbf{GPU-beschleunigte Physik-Pipeline:} Genesis basiert auf einem hochoptimierten CUDA- und Taichi-Backend, welches die numerische Integration von Starrkörpermechanik und Kontaktdynamik vollständig auf der GPU ausführt.
+	\item \textbf{Massiv-parallele Trainingsumgebungen auf Consumer-Hardware:} Die Plattform ist auf die simultane Simulation einer großen Anzahl paralleler Roboter-Instanzen auf einer einzelnen Desktop-Grafikkarte ausgelegt (der vom Framework angegebene Durchsatz liegt nach Herstellerangaben bei einer Größenordnung von hunderten bis tausenden Instanzen bzw. mehreren zehntausend Zeitschritten pro Sekunde ohne dedizierte Server-Cluster \cite{authorsGenesisGenerativeUniversal2024}). Diese Werte wurden im Rahmen dieser Arbeit nicht eigenständig durch einen Benchmark verifiziert; sie dienen lediglich der Einordnung der Plattform.
+	\item \textbf{Native PyTorch-Tensor-Schnittstelle:} Beobachtungen und Aktionsvektoren verbleiben ohne rechenintensive CPU-GPU-Speichertransfers im VRAM der Grafikkarte, was den Datendurchsatz zwischen der Physik-Engine und dem neuronalen Netzwerk maximiert.
+\end{enumerate}
 
-In der Simulation erhält der Go2-Roboter Beobachtungen über seine Gelenkpositionen und -geschwindigkeiten, die relative Position des Ziels sowie des Hindernisses und die Kontakte an den Füßen. Die Aktuierung erfolgt über 12 Motoren, die jeweils die Hüft-, Oberschenkel- und Unterschenkelgelenke der vier Beine steuern \cite{unitreeGo2Unitree2023}. Die Positionsregelung der Gelenke wird durch individuell einstellbare PD-Regler (Proportional- und Dämpfungsfaktor) realisiert. Die Simulationsumgebung arbeitet mit einer Schrittweite von $0,02$s, was einer Steuerfrequenz von 50Hz entspricht. Auf Domain Randomization wurde verzichtet, da die Experimente gezielt auf die Navigation mit einem einzelnen Hindernis und einem Ziel ausgerichtet sind.
+Neben Genesis existieren weitere moderne GPU-basierte Plattformen für massiv-paralleles Reinforcement Learning, darunter \textbf{NVIDIA Isaac} (Isaac Sim/Lab, auf Omniverse aufbauend), die ebenfalls PyTorch-anbindbare Umgebungen bereitstellen \cite{mittal2025isaaclab}. Für die hier durchgeführte Machbarkeitsstudie bot sich Genesis dennoch als die geeignete Wahl an. Zum einen liegt mit der offiziellen PPO-Referenzimplementierung des Frameworks eine etablierte und dokumentierte Trainingspipeline vor, auf der das Training dieser Arbeit aufbaut \cite{authorsGenesisGenerativeUniversal2024}. Zum anderen erfüllt Genesis mit seiner GPU-beschleunigten, headless ausführbaren und quelloffenen Architektur die Anforderungen der hier vorgesehenen Versuche vollständig. Eine vergleichende Bewertung oder ein Benchmark der Plattformen wurde im Rahmen dieser Arbeit nicht durchgeführt.
 
-Die Implementierung der Simulationsumgebung basiert auf einer Beispielumgebung für den Go2 Unitree des Genesis-Frameworks \cite{authorsGenesisGenerativeUniversal2024}, welche im Rahmen dieser Arbeit umfassend angepasst und erweitert wurde. Insbesondere wurden Beobachtungs- und Aktionsraum sowie die Belohnungsstruktur an die jeweiligen experimentellen Anforderungen angepasst. Diese Modifikationen ermöglichen eine gezielte Untersuchung der Lernleistung und Robustheit des entwickelten Steuerungsansatzes unter kontrollierten Bedingungen.
+Als Roboterplattform kommt das digitale Modell des \textbf{Unitree Go2 Edu} zum Einsatz \cite{unitreeGo2Unitree2023}. Der Go2 Edu ist ein hochagiler quadrupedaler Roboter mit einer Gesamtmasse von rund $15\,\text{kg}$ und 12 aktiven Freiheitsgraden (drei rotatorische Gelenke pro Bein: Hüftabduktion/Adduktion HAA, Hüftflexion/Extension HFE und Knieflexion/Extension KFE). Die Positionsregelung der Gelenke erfolgt über individuell parametrisierte PD-Regler bei einer Steuerfrequenz von $50\,\text{Hz}$ ($\Delta t = 0{,}02\,\text{s}$). 
+
+In der Simulation erhält die Policy zu jedem Zeitschritt einen Beobachtungsvektor bestehend aus propriozeptiven Daten (Gelenkwinkel $q$, Gelenkwinkelgeschwindigkeiten $\dot{q}$, Rumpforientierung in Euler-Winkeln $[\phi, \theta, \psi]$ und Winkelgeschwindigkeiten $\vec{\omega}_{\text{base}}$), aufgabenspezifischen Hindernissignalen sowie bei der Interaktion binären Zustandsindikatoren für Berührung und aktive Geste. Die Berührung wird in der verwendeten Implementierung positionsbasiert über den Abstand einer virtuellen Handkugel zum Kopf erkannt. Kontaktkräfte werden von der Simulation zwar registriert, das für die Policy verwendete Berührungssignal basiert jedoch ausschließlich auf dieser positionsbasierten Kontakt-/Abstandserkennung; eine Kraftmessung ist nicht Bestandteil des Signals. Auf Domain Randomization wurde im Rahmen dieser Machbarkeitsstudie bewusst verzichtet.
 \section{Der Reinforcement-Learning-Algorithmus}
-Für das Training der Steuerungpolicies wird der PPO Algorithmus eingesetzt, welcher bereits in \autoref{PPO} erläutert wurde. Die Implementierung gleicht dem gegebenen Beispiel des Genesis-Frameworks \cite{authorsGenesisGenerativeUniversal2024}, dessen Hyperparameterauswahl sich ebenfalls daran orientieren. Die Wahl von PPO erfolgte aufgrund seiner Robustheit und weiten Verbreitung im Bereich er kontinuierlichen Steuerungsaufgaben.
+Für das Training der Steuerungspolicies wird der PPO-Algorithmus eingesetzt, welcher bereits in \autoref{ss:PPO} erläutert wurde. Die Algorithmenwahl orientiert sich primär an der offiziellen Referenzimplementierung des Genesis-Frameworks \cite{authorsGenesisGenerativeUniversal2024}, welche PPO als Standard-Lernalgorithmus vorgibt und auf dessen Hyperparameterkonfiguration das Training in dieser Arbeit aufbaut. Die Entscheidung, dieser Vorgabe zu folgen, ist methodisch begründet: Sie vermeidet unnötige Komplexität bei der Algorithmenauswahl für eine Machbarkeitsstudie und erlaubt eine direkte Vergleichbarkeit mit dem Framework-eigenen Referenzverhalten. Darüber hinaus ist PPO in der Literatur für massiv-parallele Locomotion-Aufgaben gut dokumentiert und erprobt \cite{rudin2022learningwalkminutesusing, schwarke2025rslrllearninglibraryrobotics}.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Hyperparameter} & \textbf{Navigation} & \textbf{Interaktion} \\
+\midrule
+Clip-Parameter $\epsilon$ & 0,20 & 0,20 \\
+Lernrate & $1{,}0\cdot10^{-3}$ & $1{,}0\cdot10^{-4}$ \\
+Diskontfaktor $\gamma$ & 0,99 & 0,99 \\
+GAE-Parameter $\lambda$ & 0,95 & 0,95 \\
+Entropiekoeffizient & 0,001--0,02$^\ast$ & 0,01 \\
+Wertfunktionskoeffizient & 1,0 & 0,3 \\
+Lernepochen pro Update & 8 & 5 \\
+Mini-Batches pro Update & 4 & 8 \\
+Schritte pro Umgebung & 48 & 32 \\
+Aktivierung & ELU & ELU \\
+Actor-/Critic-Schichten & 512--256--128 & 512--256--128 \\
+\bottomrule
+\end{tabular}
+\caption{Verwendete PPO- und Netzwerkparameter. $^\ast$Der Entropiekoeffizient der Navigation wurde je nach Curriculum-Stufe angepasst: Stehen 0{,}001, Laufen 0{,}02, Ausweichen und Springen 0{,}005.}
+\label{tab:ppo_hyperparameters}
+\end{table}
 
 \section{Belohnungsfunktionen} \label{reward_functions}
 
-Die Gestaltung der Belohnungsfunktionen spielt eine zentrale Rolle für den Lernerfolg im Reinforcement Learning. In dieser Arbeit wurden die Belohnungsfunktionen jeweils spezifisch an die Anforderungen der unterschiedlichen Aufgabenstellungen angepasst, um ein zielgerichtetes und stabiles Lernverhalten zu fördern.
+Die Gestaltung der Belohnungsfunktion (Reward Shaping) bildet ein zentrales Steuerungsinstrument, um das Verhalten des Agenten in hochdimensionalen Aktionsräumen zu beeinflussen. Da spärliche Belohnungssignale (Sparse Rewards) die Exploration erschweren können, wird in dieser Arbeit ein modularer, überwiegend dicht belohnter Ansatz (Dense Rewards) verfolgt.
 
-Für die Navigationsaufgabe wurde die Belohnung so gestaltet, dass das Erreichen des Ziels maximiert und gleichzeitig unerwünschtes Verhalten, wie Kollisionen mit Hindernissen oder ineffiziente Bewegungen, minimiert wird. Die Belohnungsfunktionen setzt sich aus mehreren Komponenten zusammen:
+Die Gesamtbelohnung $r_t$ setzt sich zum Zeitschritt $t$ aus einer gewichteten Summe von Teilbelohnungen $r_{i,t}$ zusammen:
+\begin{equation}
+r_t = \sum_{i=1}^{n} w_i \cdot r_{i,t}
+\end{equation}
+wobei die Gewichte $w_i \in \mathbb{R}$ den relativen Einfluss und die Priorisierung der einzelnen Zielkomponenten festlegen.
+
+Für die \textbf{Navigationsumgebung} unterteilt sich die Belohnungsarchitektur in vier funktionale Kategorien:
 \begin{itemize}
-	\item \textbf{Zielannäherung:} Für die Verringerung der Distanz zum Ziel in jedem Zeitschritt wird eine positive Belohnung vergeben
-	\item \textbf{Zielerreichung:} Das Erreichen des Ziels wird mit einer hohen, einmaligen Belohnung verstärkt.
-	\item \textbf{Kollisionen:} Kollisionen mit Hindernissen oder das Verlassen des erlaubten Bereichs werden mit einer negativen Belohnung bestraft
-	\item \textbf{Stabilität:} Instabile Körperhaltungen oder Stürze führen zu einer zusätzlichen negativen Belohnung.
-	\item \textbf{Sprung - Annäherung:} In der Sprung-Stufe wird die Annäherung des Roboters zum Hindernis deutlich stärker gewichtet, um das Erkunden von Sprungkonfigurationen zu fördern
-	\item \textbf{Sprung - Absprung:} Der Übergang von der Standhaltung zur Flugphase wird belohnt, um die aktive Sprungbewegung zu verstärken
-	\item \textbf{Sprung - Flugphase:} Die Dauer der Flugphase wird belohnt, wobei diese Komponente strukturbedingt deutlich weniger gewichtet ist (1/200--1/400 der Gesamtrendite) wegen fehlender aktiver Kontrolle in der Luft
+	\item \textbf{Zielannäherung und Fortschritt ($r_{\text{target\_proximity}}$, $r_{\text{target\_reached}}$, $r_{\text{target\_progress}}$, $r_{\text{goal\_heading}}$):} Belohnt die Reduktion der euklidischen Distanz zum Navigationsziel sowie das direkte Erreichen des Zielradius. Dies erzeugt den primären Vorwärtsdrang und verhindert zielloses Verharren.
+	\item \textbf{Hindernisvermeidung und Trajektorienführung ($r_{\text{blocker\_clearance}}$, $r_{\text{centerline\_near\_blocker}}$):} Bestraft zu geringe Abstände zum Hindernis sowie starke seitliche Abweichungen vom direkten Pfad vor dem Passieren des Hindernisses, um ein kontrolliertes Umgehen zu erzwingen.
+	\item \textbf{Haltungskontrolle und Stabilität ($r_{\text{height}}$, $r_{\text{upright}}$, $r_{\text{symmetry}}$):} Forciert eine Soll-Körperhöhe ($h_{\text{target}} = 0{,}42\,\text{m}$), minimiert Roll- und Nickwinkelabweichungen ($\phi, \theta \approx 0$) und fördert symmetrische Gelenkbewegungen zur Vermeidung von Gangasymmetrien und Stürzen.
+	\item \textbf{Sprung- und Phasenbelohnungen ($r_{\text{jump\_approach}}$, $r_{\text{jump\_takeoff}}$, $r_{\text{jump\_flight}}$, $r_{\text{landing\_stability}}$):} In der Sprungstufe werden Annäherung, vertikale Bewegung, ausreichende Rumpfhöhe und Stabilität im Landeabschnitt phasenabhängig bewertet. Die Terme garantieren nicht, dass alle vier Beine gleichzeitig abheben.
 \end{itemize}
 
-Für die Interaktionsumgebung (z.B. Streicheln) wurde die Belohnungsfunktion so gestaltet, dass gezielt die erfolgreiche Kontaktaufnahme und das Halten des Kontakts mit dem Zielobjekt (z.B. einer menschlichen Hand), in dieser Arbeit repräsentiert durch eine Kugel, belohnt werden. Hierzu zählen:
+Für die \textbf{Interaktionsumgebung (Streicheln/Petting)} fokussiert die Belohnungsfunktion auf die positionsbasierte Berührungserkennung und die Reaktion während des aktiven Kontakts:
 \begin{itemize}
-	\item \textbf{Kontaktaufnahme:} Das erstmalige Herstellen eines Kontakts mit dem Zielobjekt wird positiv verstärkt.
-	\item \textbf{Kontaktdauer:} Das Halten des Kontakts über mehrere Zeitschritte wird mit einer kontinuierlichen Belohnung versehen.
-	\item \textbf{Sanftheit:} Zu hohe Kontaktkräfte werden durch einen Strafterm sanktioniert, um ein sanftes Verhalten zu fördern.
+	\item \textbf{Kontakt- und Gestenreaktion ($r_{\text{gesture\_during\_touch}}$, $r_{\text{gesture\_movement}}$):} Das Kontakt-Signal aktiviert die Geste; die ausgewertete Konfiguration belohnt während der aktiven Geste den Betrag ausgewählter Gelenkgeschwindigkeiten. Ein expliziter Trajektorien- oder Abschlussreward ist nicht implementiert.
+	\item \textbf{Standstabilität und Sitzvermeidung ($r_{\text{no\_sitting}}$, $r_{\text{petting\_stability}}$, $r_{\text{flexible\_height}}$):} Bestraft ein Absenken des Rumpfes auf den Boden (Sitzen/Einknicken) und stellt sicher, dass der Roboter während der Berührung aufrecht und stabil steht.
 \end{itemize}
 
-Die Gewichtung der einzelnen Komponenten wurde empirisch bestimmt und im Verlauf der Experimente ggf. angepasst, um ein möglichst natürliches und robustes Verhalten des Roboters zu erzielen. Die genaue mathematische Formulierung der Belohnungsfunktionen, dessen Implementierung in Python und deren Gewichtungen ist in ??? dokumentiert bzw. unter https://github.com/w0lkensucher/reinforcement\_learning\_thesis verfügbar.
+Die detaillierte mathematische Definition aller Teilterme, deren physikalische Messgrößen, die Begründung der gewählten Gewichtungsfaktoren sowie eine vergleichende Analyse von zielgerichteten Belohnungen und potenziellen Reward-Hacking-Effekten sind in \autoref{ch:reward_function_maths} dokumentiert. Der vollständige Quellcode ist im Projekt-Repository verfügbar.\footnote{Projekt-Repository mit Quellcode und Konfigurationen: \url{https://github.com/w0lkensucher/reinforcement_learning_thesis}}
 
 \section{Netzwerk-Architektur}
 
-Für die Implementierung der Policy und Value-Netzwerke wurden vollständig verbundene neuronale Netzwerke verwendet, bei dem beide Netzwerke bestehen aus zwei Hidden Layern mit jeweils 256 Neuronen, aktiviert durch ReLU-Funktionen. Die Ausgabeschicht ist jeweils linear ohne Aktivierungsfunktion.
+Für die Implementierung der Policy- und Value-Netzwerke wurden vollständig verbundene neuronale Netzwerke verwendet. Beide Netzwerke besitzen drei Hidden Layer mit 512, 256 und 128 Neuronen, die durch ELU-Funktionen aktiviert werden. Die Ausgabeschicht ist jeweils linear ohne Aktivierungsfunktion. Die konkreten Parameter sind in \autoref{tab:ppo_hyperparameters} dokumentiert.
 
-Die Policy gibt kontinuierliche Aktionen, also Drehmomente für die 12 Gelenke, aus und verwendet eine Gaußsche Normalverteilung mit trainierten Varianzparametern. Das Value-Netzwerk schätzt den Erwartungswert der kumulierten Belohnung.
+Die Policy gibt kontinuierliche Aktionen für die 12 Gelenke aus. Diese werden mit \texttt{action\_scale} skaliert und als Gelenkpositionsziele an die PD-Regler übergeben; direkte Drehmomentaktionen der Policy werden nicht verwendet. Für die Aktionsverteilung kommt eine Gaußsche Normalverteilung mit trainierten Varianzparametern zum Einsatz. Das Value-Netzwerk schätzt den Erwartungswert der kumulierten Belohnung.
 
 Diese Architektur orientiert sich an den Standardimplementierungen im Genesis-Framework \cite{authorsGenesisGenerativeUniversal2024} und bietet einen ausreichenden Kompromiss zwischen Modellflexibilität und Trainingsstabilität für kontinuierliche Steuerungsaufgaben.
 
-\section{Die Trainingsstrategie}
-Um den Lernprozess des Roboters effizienter und stabiler zu gestalten, wurde für die Navigationsaufgabe ein Curriculum-Learning-Ansatz implementiert. Dabei werden die Trainingsumgebungen und Aufgabenstellungen schrittweise in ihrer Komplexität gesteigert.
-Die verschiedenen Stufen sind aufeinander aufgebaut:
-\begin{itemize}
-	\item \textbf{Stehen:} Als Grundlage wird zuerst Stehen trainiert.
-	\item \textbf{Laufen:} Laufen wird nach dem Stehen trainiert und ist bildet die Grundlage für die weiteren Stufen.
-	\item \textbf{Navigation:} Die Navigation mit einem Hindernis und einem Ziel wird in dieser Stufe trainiert.
-	\item \textbf{Springen:} Auf Grundlage vom Laufen wird das Springen trainiert.
-\end{itemize} 
-Jede Curriculum-Stufe ist so gestaltet, dass sie auf den in der vorherigen Stufe erworbenen Fähigkeiten aufbaut. Der Übergang zur nächsten Stufe erfolgt, sobald der Roboter in der aktuellen Stufe eine definierte Erfolgsrate erreicht, und wird manuell durchgeführt. Durch dieses stufenweise Vorgehen wird eine bessere Generalisierung und Robustheit des gelernten Verhaltens ermöglicht. In der letzten Stufe, dem Erlernen der Sprungfähigkeit, wird zusätzlich während des Trainings die Höhe des Hindernisses stückweise erhöht nach konsistenter Bewältigung des Hindernisses.
+\section{Die Trainingsstrategie: Curriculum Learning}
 
-In der Interaktionsumgebung wurde derselbe Curriculum-Ansatz angewandt: Nach dem initialen Stabilitätstraining (Stufe 1) trainierte die zweite Stufe den Roboter darauf, Kopfberührungen zu erkennen und mit einer Reaktionsgeste zu antworten. Diese Geste, bestehend aus koordinierten Bewegungen der Gelenke, sollte während der aktiven Berührung stattfinden und ein natürliches, sanftes Interaktionsverhalten demonstrieren. Das Training dieser Geste war darauf ausgerichtet, den Roboter dazu zu befähigen, menschliche Zuneigung zu erkennen und angemessen zu reagieren, ohne dabei seine Stabilität zu verlieren oder abrupte, unnatürliche Bewegungen auszuführen.
+Um den Lernprozess in hochdimensionalen kontinuierlichen Aktionsräumen zu strukturieren und das Problem spärlicher Belohnungssignale (Sparse Rewards) bei komplexen Bewegungsabläufen zu überwinden, wird ein \textbf{Curriculum-Learning-Ansatz} eingesetzt \cite{heessEmergenceLocomotionBehaviours2017, rudin2022learningwalkminutesusing}. Das Grundprinzip besteht darin, die Komplexität der Aufgabenstellung schrittweise zu steigern: Der Agent erlernt zunächst fundamentale Basisfähigkeiten (wie Gleichgewicht und Rumpfstabilisierung), bevor diese als funktionale Bausteine für anspruchsvollere Navigations- und dynamische Interaktionsaufgaben wiederverwendet werden.
+
+\autoref{tab:curriculum_stages} gibt einen systematischen Überblick über die konzipierte Stufenarchitektur beider Trainingsumgebungen.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{cllll}
+\toprule
+\textbf{Stufe} & \textbf{Bezeichnung} & \textbf{Lernziel / Kernanforderung} & \textbf{Initialisierung / Basis} & \textbf{Horizon} \\
+\midrule
+\multicolumn{5}{l}{\textit{Navigationsumgebung}} \\
+1 & Stehen & Rumpfhöhe $0{,}42\,\text{m}$, Stabilität, $\vec{v} = 0$ & Zufällige Gewichtsinitialisierung & 400 Iter. \\
+2 & Laufen & Tracking von $v_x, v_y, \omega_z$, Trabgang & Checkpoint Stufe 1 (Iter. 50) & 1049 Iter. \\
+3 & Navigation & Zielansteuerung, Umgehen von Hindernis & Checkpoint Stufe 2 (Iter. 1049) & 1500 Iter. \\
+3b (4) & Springen & Vertikalsprung, Flugphase, Landung & Checkpoint Stufe 2 (Iter. 1049) & 1500 Iter. \\
+\midrule
+\multicolumn{5}{l}{\textit{Interaktionsumgebung (Petting)}} \\
+1 & Stehen & Standstabilität unter externen Kräften & Zufällige Gewichtsinitialisierung & 300 Iter. \\
+2 & Gestenreaktion & Taktile Berührungserkennung \& Geste & Checkpoint Stufe 1 (Iter. 50) & 600 Iter. \\
+\bottomrule
+\end{tabular}
+\normalsize
+\caption{Übersicht der Curriculum-Stufenarchitektur für Navigation und Interaktion}
+\label{tab:curriculum_stages}
+\end{table}
+
+\subsection{Stufenarchitektur und Verzweigung}
+Jede Curriculum-Stufe baut methodisch auf den Gewichten der jeweils vorangegangenen Stufe auf. Der Wechsel zur nächsten Stufe erfolgte manuell, wenn die betrachteten Kurven über einen Beobachtungsabschnitt keine deutliche weitere Verbesserung zeigten. Dies wird im Folgenden als stabiles Plateau bezeichnet und nicht als formaler Konvergenznachweis.
+
+Hierbei ist zu beachten, dass das \textbf{Springen (Stufe 4)} strukturell keine rein sequentielle Fortsetzung der horizontalen Navigation (Stufe 3) darstellt, sondern als \textbf{Verzweigung 3b} auf Grundlage der erlernten Laufbewegung (Stufe 2) operiert. Während Stufe 3 das zweidimensionale Ausweichen auf horizontaler Ebene schult, verlangt Stufe 3b den Übergang in die vertikale Dimension unter temporärer Aufgabe des stabilen Bodenkontakts.
+
+In der Interaktionsumgebung dient Stufe 1 der Etablierung robuster Standstabilität unter dem Einfluss gravitativer und externer Störkräfte. In Stufe 2 wird der Roboter darauf trainiert, auf physische Berührungen am Kopf (simuliert durch eine taktile Kollisionsgeometrie) mit einer koordinierten Gelenkbewegung zu reagieren. Die Herausforderung besteht darin, zwischen Berührungs- und Nicht-Berührungsphasen zu differenzieren und während der aktiven Gestenausführung das Gleichgewicht nicht zu verlieren.
 
 \section{Versuchsaufbau und Evaluationsmetrik}
-Für die Evaluation der trainierten Policies wurden mehrere Trainingsläufe mit unterschiedlichen Zufallsinitialisierungen oder Seeds durchgeführt, um die Robustheit und Reproduzierbarkeit der Ergebnisse zu gewährleisten. Die Trainings wurden jeweils mit identischen Hyperparametern, aber verschiedenen Seeds gestartet. Nach Abschluss des Trainings erfolgte die Auswertung der Ergebnisse anhand der wichtigsten Metriken: dem Return, Episodenlänge, Entropie und der Curriculum-Stufe spezifischen Rewards.
 
-Der \textbf{Return}, wie in \autoref{ss:return_policy} beschrieben wird, ist die kumulierte Belohnung eines Trainings oder einer Episode. Die \textbf{Episodenlänge} beschreibt die Anzahl der Zeitschritte einer Episode, bis diese 
-durch erfolgreiche Zielerreichung oder Abbruchbedingung endet. Die \textbf{Entropie der Policy} 
-quantifiziert die Unsicherheit oder Variabilität der Aktion-Verteilung und ist ein Maß für 
-die Exploration des Agenten. \textbf{Spezifische Rewards} sind einzelne Komponenten der 
-Belohnungsfunktion (z.B. Zielannäherung, Stabilität), die separat ausgewertet werden.
+Zur methodisch fundierten Bewertung der trainierten Policies wird ein strukturierter Evaluationsansatz verwendet. Trainingsläufe im Reinforcement Learning können aufgrund zufälliger Netzwerkinitialisierung und stochastischer Aktionsauswahl unterschiedliche Ergebnisse liefern \cite{hendersonDeepReinforcementLearning2019}. In den ausgewerteten Versuchsreihen wurden die Seeds 1, 8, 42, 24 und 77 verwendet. Die Grundstufen der Navigation (Stand, Laufen) sowie beide Interaktionsstufen (Stehen, Geste) wurden jeweils mit allen fünf Seeds vollständig trainiert. Für die darauf aufbauenden Stufen (Ausweichen, Springen) wurde konsistent vom zuvor ausgewählten Lauf-Checkpoint (Seed 1, Iteration 1049) ausgegangen und jeweils mit fünf Seeds weitertrainiert; die fünf Läufe dieser Folgestufen teilen sich also denselben Startzustand, unterscheiden sich jedoch in den Zufalls-Seeds des Folgetrainings. Diese Zuordnung der Checkpoints sowie die quantitativen Angaben sind eigene Versuchsdaten und werden im Ergebniskapitel dokumentiert. Die Standardkonfigurationen definieren jeweils nur einen Seed pro Trainingsprozess; aus der Konfiguration allein kann daher nicht auf fünf vollständige, unabhängige Wiederholungen jeder Stufe geschlossen werden.
 
-Da die quantitativen Metriken stark von der Skalierung der Teilbelohnungen abhängen und nur bedingt auf das tatsächliche Verhalten des Roboters schließen lassen, diente als primäre Evaluationsmethode die visuelle Auswertung aufgezeichneter Episoden. Die Lernkurven wurden als Mittelwert und Standardabweichung über die verschiedenen Seeds dargestellt, um die Varianz und Stabilität des Lernverhaltens zu beurteilen. Zusätzlich wurden ausgewählte Episoden als Video aufgezeichnet, um das qualitative Verhalten des Roboters zu veranschaulichen.
+Für die Einordnung dieser Versuche ist zu beachten, dass die verfügbaren Läufe, anders als bei der hier bewusst nicht eingesetzten Domain Randomization (vgl. Grundlagen in \autoref{ch:theoretical_foundation}), nur eine orientierende Betrachtung der Trainingsverläufe erlauben und keine belastbaren inferenzstatistischen Aussagen begründen.
 
-Diese Vorgehensweise ermöglicht eine umfassende Bewertung der Lernleistung und der Robustheit der trainierten Policies unter realitätsnahen Bedingungen.
+Die Bewertung der gelernten Verhaltensweisen basiert auf zwei sich ergänzenden Ebenen: einer \textbf{qualitativen Inspektion} aufgezeichneter Episoden und den dazu korrespondierenden \textbf{quantitativen Trainingsmetriken}. Da das Herauslesen aufgabenspezifischer Episode-Level-Daten zu Zielerreichung und Kollision aus dem aufgezeichneten Datenbestand im Rahmen dieser Machbarkeitsstudie nicht erfolgreich umgesetzt werden konnte (vgl. \autoref{ch:results}), stützt sich die qualitative Beurteilung der Zielerreichung, Zeit bis zum Ziel, Kollisionsvermeidung und Zieldistanz auf die visuelle Analyse der Aufnahmen. Diese qualitativen Befunde werden durch die folgenden quantitativen Trainingsmetriken untermauert:
+\begin{itemize}
+	\item \textbf{Kumulierter Return ($R$):} Die über die Episode aufsummierte Gesamtrendite. Der Return dient als Optimierungsziel für den PPO-Algorithmus, wird jedoch \textbf{nicht als alleinige Erfolgsmetrik} herangezogen, da sein absoluter Betrag stark von der gewählten Skalierung der Teilbelohnungen und Strafterme abhängt und nicht direkt proportional zur Aufgabenbewältigung ist.
+	\item \textbf{Mittlere Episodenlänge ($\bar{L}_{\text{ep}}$):} Die durchschnittliche Dauer einer Episode. Ein plötzlicher Einbruch dieser Metrik während des Trainings ist ein kritischer Indikator für Instabilität oder vorzeitige Episodenabbrüche durch Stürze (z.\,B. Überschreiten kritischer Roll- oder Nickwinkel).
+	\item \textbf{Policy-Entropie ($H(\pi)$):} Die Entropie der Aktionsverteilung liefert diagnostische Einblicke in die Balance zwischen Exploration (hohe Entropie) und deterministischer Verfestigung des Verhaltens (sinkende Entropie).
+	\item \textbf{Curriculumspezifische Belohnungsterme ($r_{\text{term}}$):} Die für die jeweilige Curriculum-Stufe konfigurierten Teilbelohnungen (z.\,B. Zielannäherung, Sprungphasen, Stabilität) dienen der Zuordnung beobachteter Verhaltensweisen zu den intendierten Lernzielen und werden stets in Relation zu Return und Episodenlänge betrachtet.
+\end{itemize}
+
+Für Trainingskurven mit mehreren vorliegenden Läufen werden Mittelwert und Streubreite über die dokumentierten Seeds ausgewertet. Einzelne Kurven oder Checkpoints werden als Einzelbeobachtungen gekennzeichnet. Die qualitative Inspektion ausgewählter Episoden anhand von Videoaufzeichnungen bildet die Grundlage der aufgabenspezifischen Verhaltensbeurteilung und wird durch die genannten Trainingsmetriken untermauert; dabei werden Bewegungsmuster, Schrittkoordination und das Verhalten bei Hinderniskontakten im Detail analysiert. Die aufgezeichneten Videos sind online dokumentiert.\footnote{Videodokumentation der experimentellen Ergebnisse: \url{https://drive.google.com/drive/folders/1ZInYQzLSj-5zsYY7pxdSiBy7aekxNdNQ?usp=drive_link}}

@@ -1,0 +1,246 @@
+﻿\chapter{Symbole und Variablen}\label{ch:symbols}
+
+Dieses Kapitel enthält eine umfassende Übersicht aller in dieser Arbeit verwendeten mathematischen Symbole und Variablen. Diese Tabelle dient der Lesbarkeit und ermöglicht schnelles Nachschlagen von Variablendefinitionen.
+
+\section{Reward-bezogene Symbole}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$r_t$ & - & Gesamtbelohnung zum Zeitschritt $t$ \\
+		$r_{i,t}$ & - & Teilbelohnung $i$ zum Zeitschritt $t$ \\
+		$w_i$ & - & Gewicht der Teilbelohnung $i$ (skalarer Faktor) \\
+		$R_t$ & - & Kumulativer Return (Episodenrendite) ab Zeitschritt $t$ \\
+		\bottomrule
+	\end{tabular}
+	\caption{Reward- und Return-Symbole}
+	\label{tab:symbols_reward}
+\end{table}
+
+\section{Zustandsvariablen und Kinematik}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$s_t$ & - & Beobachtungszustand zum Zeitschritt $t$ \\
+		$\mathcal{S}$ & - & Zustandsraum \\
+		$q_j$ & rad & Gelenkwinkel des Gelenks $j$ \\
+		$\dot{q}_j$ & rad/s & Gelenkgeschwindigkeit des Gelenks $j$ \\
+		$h_{\text{base}}$ & m & Körperhöhe des Roboters (Höhe des Schwerpunkts) \\
+		$h_{\text{target}}$ & m & Zielkörperhöhe \\
+		$\phi$ & rad & Roll-Winkel (Rotation um X-Achse) \\
+		$\theta$ & rad & Pitch-Winkel (Rotation um Y-Achse) \\
+		$\psi$ & rad & Yaw-Winkel (Rotation um Z-Achse) \\
+		\bottomrule
+	\end{tabular}
+	\caption{Zustands- und Kinematik-Symbole}
+	\label{tab:symbols_state}
+\end{table}
+
+\section{Bewegungs- und Geschwindigkeitsvariablen}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$a_t$ & - & kontinuierlicher Aktionsvektor zum Zeitschritt $t$ \\
+		$\mathcal{A}$ & - & Aktionsraum (12-dimensional für Go2) \\
+		$v_{\text{forward}}$ & m/s & Robotergeschwindigkeit in Vorwärtsrichtung \\
+		$v_{\text{lateral}}$ & m/s & Robotergeschwindigkeit in seitlicher Richtung \\
+		$\|v_{xy}\|$ & m/s & Norm der Geschwindigkeit in der XY-Ebene \\
+		$v_{\text{max}}$ & m/s & Maximale belohnte Geschwindigkeit (2.0 m/s) \\
+		$v_{\text{min}}$ & m/s & Minimalgeschwindigkeit für Bewegungsbonus (0.1 m/s) \\
+		$\omega_{\text{base}}$ & rad/s & Winkelgeschwindigkeit des Roboterkörpers \\
+		$\dot{\mathbf{v}}_{\text{linear}}$ & m/s$^2$ & Lineare Beschleunigung \\
+		\bottomrule
+	\end{tabular}
+	\caption{Bewegungs- und Geschwindigkeitsvariablen}
+	\label{tab:symbols_velocity}
+\end{table}
+
+\section{Positions- und Abstands-Variablen}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$x_{\text{robot}}$ & m & X-Position des Roboters im globalen Koordinatensystem \\
+		$y_{\text{robot}}$ & m & Y-Position des Roboters im globalen Koordinatensystem \\
+		$z_{\text{robot}}$ & m & Z-Position des Roboters im globalen Koordinatensystem \\
+		$x_{\text{target}}$ & m & X-Position des Navigationsziels \\
+		$y_{\text{target}}$ & m & Y-Position des Navigationsziels \\
+		$x_{\text{blocker}}$ & m & X-Position des Hindernisses \\
+		$d_{\text{target}}$ & m & Euklidischer Abstand zum Ziel \\
+		$d_{\text{blocker}}$ & m & Euklidischer Abstand zum Hindernis \\
+		$d_{\text{max}}$ & m & Maximaler belohnter Abstand (2.0 m) \\
+		\bottomrule
+	\end{tabular}
+	\caption{Positions- und Abstands-Variablen}
+	\label{tab:symbols_position}
+\end{table}
+
+\section{Algorithmus und Netzwerk-Symbole}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$\pi(a_t|s_t)$ & - & Policy: Wahrscheinlichkeit der Aktion $a_t$ gegeben Zustand $s_t$ \\
+		$\pi_{\text{old}}$ & - & Alte Policy (vor Gradient-Schritt) \\
+		$\pi_{\text{new}}$ & - & Neue Policy (nach Gradient-Schritt) \\
+		$V(s_t)$ & - & Wertfunktion: erwarteter Return aus Zustand $s_t$ \\
+		$Q(s_t, a_t)$ & - & Q-Funktion: erwarteter Return für Zustand-Aktions-Paar \\
+		$\mu(s_t)$ & - & Mittelwert der Gaussian Policy (Aktionen) \\
+		$\sigma(s_t)$ & - & Standardabweichung der Gaussian Policy \\
+		$\epsilon$ & - & Clipping Parameter (PPO, typ. $\epsilon = 0,2$) \\
+		$\gamma$ & - & Diskontfaktor (0 bis 1, typ. 0.99) \\
+		$\lambda$ & - & GAE-Parameter für Advantage-Berechnung \\
+		\bottomrule
+	\end{tabular}
+	\caption{Algorithmus- und Policy-Symbole}
+	\label{tab:symbols_algorithm}
+\end{table}
+
+\section{Netzwerk-Architektur Symbole}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$\theta$ & - & Parameter des Policy-Netzwerks \\
+		$\phi$ & - & Parameter des Value-Netzwerks \\
+		$W^{(l)}$ & - & Gewichtungsmatrix der Schicht $l$ \\
+		$b^{(l)}$ & - & Bias/Verzerrung der Schicht $l$ \\
+		$h^{(l)}$ & - & Hidden-Layer-Aktivierungen in Schicht $l$ \\
+		$g(\cdot)$ & - & Aktivierungsfunktion (ReLU, Tanh, etc.) \\
+		$f_\theta(s)$ & - & Netzwerk-Output (Policy oder Value) mit Parametern $\theta$ \\
+		\bottomrule
+	\end{tabular}
+	\caption{Netzwerk-Architektur Symbole}
+\end{table}
+
+\section{Umgebungs- und Trainings-Symbole}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$\mathcal{E}$ & - & Umgebung (Environment) \\
+		$T$ & - & Maximale Episodenlänge bzw. Horizont \\
+		$\tau$ & - & Trajektorie (Sequenz von Zustände-Aktionen-Rewards) \\
+		$N$ & - & Anzahl der parallelen Umgebungen \\
+		$\text{seed}$ & - & Zufallswurzel für Reproduzierbarkeit \\
+		$t$ & Schritte & Zeitschritt innerhalb einer Episode \\
+		$i$ & Episode & Episoden-Index \\
+		$k$ & Iterationen & PPO-Update-Iteration \\
+		\bottomrule
+	\end{tabular}
+	\caption{Umgebungs- und Trainings-Symbole}
+	\label{tab:symbols_training}
+\end{table}
+
+\section{Spezifische Reward-Komponenten-Symbole}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Einheit} & \textbf{Bedeutung} \\
+		\midrule
+		$r_{\text{forward}}$ & - & Vorwärtsbewegung-Reward (Navigation) \\
+		$r_{\text{keep_moving}}$ & - & Allgemeine Bewegungs-Reward \\
+		$r_{\text{tracking_lin_vel}}$ & - & Lineargeschwindigkeits-Tracking-Reward \\
+		$r_{\text{tracking_ang_vel}}$ & - & Giergeschwindigkeits-Tracking-Reward \\
+		$r_{\text{straight_walk_when_clear}}$ & - & Geradeauslauf-Reward bei freier Strecke \\
+		$r_{\text{lin_vel_z}}$ & - & Vertikalgeschwindigkeits-Strafe \\
+		$r_{\text{action_rate}}$ & - & Aktionsglättungs-Strafe \\
+		$r_{\text{similar_to_default}}$ & - & Referenzpose-Abweichungs-Reward \\
+		$r_{\text{target_progress}}$ & - & Zielrichtungs-Fortschritts-Reward \\
+		$r_{\text{target_proximity}}$ & - & Zielannäherungs-Reward \\
+		$r_{\text{target_reached}}$ & - & Zielerreichungs-Bonus \\
+		$r_{\text{goal_heading}}$ & - & Zielausrichtungs-Reward \\
+		$r_{\text{fast_completion}}$ & - & Schnellabschluss-Bonus \\
+		$r_{\text{obstacle_avoidance}}$ & - & Hinderniskollisions-Strafe \\
+		$r_{\text{blocker_clearance}}$ & - & Hindernisvermeidungs-Reward \\
+		$r_{\text{centerline\_near\_blocker}}$ & - & Mittellinie-Penalty (Weg-Verfolgung) \\
+		$r_{\text{height}}$ & - & Höhenkontroll-Reward \\
+		$r_{\text{symmetry}}$ & - & Symmetrie-Reward (Gelenkwinkel) \\
+		$r_{\text{jump_approach}}$ & - & Sprungannäherungs-Reward (Phase 1) \\
+		$r_{\text{jump_takeoff}}$ & - & Absprung-Reward (Phase 2) \\
+		$r_{\text{jump_flight}}$ & - & Flugphasen-Reward (Phase 3) \\
+		$r_{\text{landing_stability}}$ & - & Landestabilitäts-Reward \\
+		$r_{\text{petting_response}}$ & - & Petting-Reaktions-Reward (Interaktion) \\
+		$r_{\text{gesture_during_touch}}$ & - & Gesten-während-Berührung-Reward \\
+		$r_{\text{gesture_movement}}$ & - & Gelenkbewegung-während-Geste-Reward \\
+		$r_{\text{no_sitting}}$ & - & Sitzverbot-Strafe \\
+		$r_{\text{petting\_stability}}$ & - & Stabilitäts-Reward \\
+		$r_{\text{flexible_height}}$ & - & Flexible-Höhen-Reward \\
+		$r_{\text{upright}}$ & - & Aufrechte-Haltung-Reward \\
+		\bottomrule
+	\end{tabular}
+	\caption{Spezifische Reward-Komponenten-Symbole}
+	\label{tab:symbols_rewards}
+\end{table}
+
+\section{Mathematische Funktionen und Operatoren}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{lll}
+		\toprule
+		\textbf{Symbol} & \textbf{Funktion} & \textbf{Definition} \\
+		\midrule
+		$\text{clamp}(x, a, b)$ & Begrenzung & Begrenzt $x$ auf das Intervall $[a, b]$ \\
+		$\exp(x)$ & Exponentialfunktion & $e^x$ \\
+		$\max(a, b)$ & Maximum & Größtes Element \\
+		$\min(a, b)$ & Minimum & Kleinstes Element \\
+		$\|x\|$ & Euklidische Norm & $\sqrt{\sum_i x_i^2}$ \\
+		$|x|$ & Absolutwert & Betrag von $x$ \\
+		$\ind[P]$ & Indikatorfunktion & 1 wenn $P$ wahr, 0 sonst \\
+		$\nabla$ & Gradient & Vektor partieller Ableitungen \\
+		\bottomrule
+	\end{tabular}
+	\caption{Mathematische Funktionen und Operatoren}
+	\label{tab:symbols_functions}
+\end{table}
+
+\section{Abkürzungen und Akronyme}
+
+\begin{table}[htbp]
+	\centering
+	\begin{tabular}{ll}
+		\toprule
+		\textbf{Akronym} & \textbf{Bedeutung} \\
+		\midrule
+		RL & Reinforcement Learning (Bestärkendes Lernen) \\
+		DRL & Deep Reinforcement Learning \\
+		PPO & Proximal Policy Optimization \\
+		MDP & Markov Decision Process \\
+		GAE & Generalized Advantage Estimation \\
+		PD & Proportional-Derivative (Regler) \\
+		MLP & Multilayer Perceptron \\
+		ReLU & Rectified Linear Unit \\
+		IMU & Inertial Measurement Unit \\
+		DOF & Degree of Freedom (Freiheitsgrad) \\
+		\bottomrule
+	\end{tabular}
+	\caption{Abkürzungen und Akronyme}
+	\label{tab:symbols_acronyms}
+\end{table}
+

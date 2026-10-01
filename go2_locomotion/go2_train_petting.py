@@ -71,7 +71,7 @@ def get_petting_train_cfg(exp_name, max_iterations):
         "num_steps_per_env": 32,  # Longer episodes for petting
         "save_interval": 50,
         "empirical_normalization": True,
-        "seed": 8, # set to different seeds for multiple runs
+        "seed": 24, # set to different seeds for multiple runs
     }
 
 

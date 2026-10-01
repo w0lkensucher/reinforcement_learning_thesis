@@ -1,133 +1,305 @@
-\chapter{Mathematische Formulierung der Belohnungsfunktion}\label{reward_function_maths}
+﻿\chapter{Mathematische Formulierung der Belohnungsfunktionen}\label{ch:reward_function_maths}
 
-% TODO korrigieren
+In diesem Anhang werden die mathematischen Formulierungen, physikalischen Messgrößen, Verhaltensziele und Gewichtungsbegründungen der für beide Trainingsumgebungen (Navigation und Interaktion) verwendeten Belohnungsfunktionen detailliert dargelegt. Dies gewährleistet eine lückenlose Nachvollziehbarkeit und Reproduzierbarkeit der Experimente und analysiert potenzielle Artefakte des Reward Shapings. Die Formeln orientieren sich an der tatsächlichen Implementierung in den Umgebungsdateien (\texttt{go2\allowbreak\_env\allowbreak\_base.py}, \texttt{go2\allowbreak\_env\allowbreak\_navigation.py}, \texttt{go2\allowbreak\_env\allowbreak\_petting.py}) sowie an den Gewichtungen in den Trainingsskripten (\texttt{go2\allowbreak\_train\allowbreak\_navigation.py}, \texttt{go2\allowbreak\_train\allowbreak\_petting.py}).~\newline
 
-Navigation-Umgebung
-Die Gesamtbelohnung 
-r
-t
-r 
-t
-​
-setzt sich aus mehreren Teilbelohnungen zusammen:
+Zwei Darstellungsregeln gelten für alle Terme: Erstens werden Zeitkontinuumswerte mit dem Zeitindex $t$ bezeichnet. Zweitens wird jede Teilbelohnung $r_{i,t}$ mit einem Gewichtungsfaktor $w_i$ multipliziert. In der Implementierung werden alle Gewichte zusätzlich mit der Steuerdauer $\Delta t = 0{,}02\,\text{s}$ ($50\,\text{Hz}$) skaliert (vgl. \texttt{reward\_scales[name]}{}\texttt{ *= self.dt}), sodass der tatsächlich akkumulierte Beitrag pro Zeitschritt $w_i \cdot \Delta t \cdot r_{i,t}$ beträgt; die in den nachfolgenden Tabellen angegebenen $w_i$ sind die unskalierten Konfigurationswerte. Darüber hinaus wird zur Kennzeichnung von Bedingungen die Indikatorfunktion $\ind[B]$ verwendet, die den Wert $1$ annimmt, wenn die Bedingung $B$ erfüllt ist, und sonst $0$.
 
-[
-r_t = w_1 \cdot r_{\text{forward}} + w_2 \cdot r_{\text{keep_moving}} + w_3 \cdot r_{\text{blocker_clearance}} + w_4 \cdot r_{\text{centerline}} + w_5 \cdot r_{\text{height}} + w_6 \cdot r_{\text{symmetry}}
-]
+\section{Gesamtstruktur der Belohnungsfunktion}
 
-Beispielhafte Teilbelohnungen:
+Das Lernsignal $r_t$ zu jedem diskreten Zeitschritt $t$ wird als skalarer Wert aus einer Linearkombination $n$ gewichteter Teilterme berechnet:
+\begin{equation}\label{eq:total_reward_generic}
+r_t = \sum_{i=1}^{n} w_i \cdot r_{i,t}
+\end{equation}
+Hierbei repräsentiert $w_i \in \mathbb{R}$ den Gewichtungsfaktor und $r_{i,t} \in \mathbb{R}$ den normierten oder skalierten Funktionswert der $i$-ten Teilbelohnung. Positive Gewichte ($w_i > 0$) verstärken gewünschtes Verhalten, während negative Gewichte ($w_i < 0$) als Strafterme (Penalties) zur Vermeidung unerwünschter Zustände dienen. In Abhängigkeit von der aktuellen Curriculum-Stufe wird die Auswahl der aktiven Terme $i$ sowie deren Gewichtung $w_i$ variiert; die regionsspezifischen Sätze sind in \autoref{tab:nav_reward_weights} und \autoref{tab:pet_reward_weights} zusammengefasst.
 
-Vorwärtsbewegung:
-[
-r_{\text{forward}} = \text{clamp}(v_{\text{forward}}, 0, 2.0) + \begin{cases}
-	-1.0, & v_{\text{forward}} < 0.1 \
-	0, & \text{sonst}
+\section{Belohnungsfunktionen der Navigationsumgebung}
+
+Die Navigationsaufgabe erfordert das Ausbalancieren von Vorwärtsdrang, Haltungsstabilität, Pfadverfolgung und Hindernisbewältigung. Die Terme lassen sich in drei Gruppen gliedern: (a) geteilte Lokomotions- und Stabilitätsterme, die aus der Basisumgebung stammen, (b) ziel- und hindernisbezogene Terme der Stufen $3$ und $4$ sowie (c) sprungphasenbasierte Terme der Stufe $4$.
+
+\subsection{Geteilte Lokomotions- und Stabilitätsterme}
+
+Die folgenden Terme erben aus der Basisumgebung \texttt{go2\_env\_base.py} bzw. der Navigationsumgebung \texttt{go2\_env\_navigation.py} und werden je nach Stufe mit unterschiedlichem Gewicht aktiviert.
+
+\subsubsection{Geschwindigkeitstracking ($r_{\text{tracking\_lin\_vel}}$, $r_{\text{tracking\_ang\_vel}}$)}
+\begin{equation}\label{eq:nav_tracking}
+r_{\text{tracking\_lin\_vel}} = \exp\!\left(-\frac{\lVert \mathbf{c}_{xy} - \mathbf{v}_{xy}\rVert_2^2}{\sigma_{\text{tr}}}\right), \qquad
+r_{\text{tracking\_ang\_vel}} = \exp\!\left(-\frac{(c_z - \omega_z)^2}{\sigma_{\text{tr}}}\right)
+\end{equation}
+mit dem Sollgeschwindigkeitsvektor $\mathbf{c}_{xy}=[c_x,c_y]^T$, der tatsächlichen Horizontalgeschwindigkeit $\mathbf{v}_{xy}$, der Soll-Gierrate $c_z$, der Ist-Gierrate $\omega_z$ und der Tracking-Breite $\sigma_{\text{tr}}$ (stufenabhängig $0{,}5$ bzw. $0{,}25$). Die Terme belohnen die Einhaltung der vorgegebenen Geschwindigkeitskommandos.
+
+\subsubsection{Vorwärtsbewegung und In-Bewegung-Bleiben ($r_{\text{forward\_movement}}$, $r_{\text{keep\_moving}}$)}
+\begin{equation}\label{eq:nav_forward}
+r_{\text{forward\_movement}} = \operatorname{clip}(v_x, 0, 2{,}0) - \ind[v_x < 0{,}1]
+\end{equation}
+\begin{equation}\label{eq:nav_keep_moving}
+r_{\text{keep\_moving}} = \operatorname{clip}\!\left(\lVert \mathbf{v}_{xy}\rVert_2, 0, 2{,}0\right) - \ind\!\left[\lVert \mathbf{v}_{xy}\rVert_2 < 0{,}1\right]
+\end{equation}
+$r_{\text{forward\_movement}}$ belohnt die Vorwärtsgeschwindigkeit $v_x$ (gedeckelt bei $2\,\text{m/s}$) und bestraft Stillstand. $r_{\text{keep\_moving}}$ verwendet stattdessen für laterale Ausweichmanöver die gesamte Horizontalgeschwindigkeit, damit seitliches Bewegen nicht als Stillstand gewertet wird.
+
+\subsubsection{Geradeauslaufen bei freier Strecke ($r_{\text{straight\_walk\_when\_clear}}$)}
+\begin{equation}\label{eq:nav_straight}
+r_{\text{straight\_walk\_when\_clear}} = \big(0{,}5\,\operatorname{clip}(v_x,0,2) - 2{,}0\,|v_y| - 1{,}5\,|\omega_z|\big)\cdot \gamma_{\text{safe}}
+\end{equation}
+Der Faktor $\gamma_{\text{safe}}\in[0,1]$ ist $1$, wenn das nächstgelegene Hindernis mindestens $2\,\text{m}$ entfernt ist oder ein überspringbares (niedriges) Hindernis vorliegt; er fällt linear im Bereich von $2\,\text{m}$ bis $1\,\text{m}$ auf $0{,}1$ und unterhalb von $0{,}5\,\text{m}$ auf $0$. Der Term fördert gleichmäßiges Geradeauslaufen, sofern die Strecke frei ist, und unterdrückt unnötiges Schleichen und Drehen in der Nähe von Hindernissen.
+
+\subsubsection{Körperhöhenregelung ($r_{\text{height}}$)}
+\begin{equation}\label{eq:nav_height_term}
+r_{\text{height}} = \exp\!\left(-10\cdot \operatorname{clamp}\!\left(\left|h_{\text{base}} - h_{\text{target}}\right| - \epsilon_h,\, 0,\, \infty\right)\right)
+\end{equation}
+mit der Sollhöhe $h_{\text{target}} = 0{,}42\,\text{m}$ (Basiswert) und der Toleranz $\epsilon_h = 0{,}1\,\text{m}$. Abweichungen innerhalb der Toleranz werden nicht bestraft; außerhalb fällt der Term exponentiell ab.
+
+\subsubsection{Aufrechte Orientierung ($r_{\text{upright}}$)}
+\begin{equation}\label{eq:nav_upright_term}
+r_{\text{upright}} = \exp\!\left(-5 \left(|\phi| + |\theta|\right)\right)
+\end{equation}
+wobei $\phi$ den Rollwinkel (Drehung um X-Achse) und $\theta$ den Nickwinkel (Drehung um Y-Achse) beschreiben. Der Term begünstigt eine horizontal ausgerichtete Rumpflage und unterdrückt Kippbewegungen.
+
+\subsubsection{Gelenksymmetrie ($r_{\text{symmetry}}$)}
+\begin{equation}\label{eq:nav_symmetry_term}
+\begin{aligned}
+r_{\text{symmetry}} ={}& -\sum_{j\in\text{Hip}} |q_{j,\text{L}} - q_{j,\text{R}}| - \sum_{j\in\text{Thigh}} |q_{j,\text{L}} - q_{j,\text{R}}| \\
+&- \sum_{j\in\text{Calf}} |q_{j,\text{L}} - q_{j,\text{R}}|
+\end{aligned}
+\end{equation}
+Der Term summiert die paarweisen Winkeldifferenzen der korrespondierenden Gelenke (Hüfte, Oberschenkel, Unterschenkel) der linken (L) und rechten (R) Körperseite. Er fördert einen harmonischen, symmetrischen Trabgang und verhindert asymmetrisches Humpeln.
+
+\subsubsection{Aktionsglättung ($r_{\text{action\_rate}}$) und Referenzpose ($r_{\text{similar\_to\_default}}$)}
+\begin{equation}\label{eq:nav_action_rate}
+r_{\text{action\_rate}} = -\lVert \mathbf{a}_t - \mathbf{a}_{t-1}\rVert_2^2
+\end{equation}
+\begin{equation}\label{eq:nav_similar_to_default}
+r_{\text{similar\_to\_default}} = -\sum_{j} \left|q_{j,t} - q_{j,\text{default}}\right|
+\end{equation}
+mit dem Aktionsvektor $\mathbf{a}_t\in\mathbb{R}^{12}$ und der Referenzpose $q_{j,\text{default}}$. Der Glättungsterm dämpft hochfrequente Sollwertsprünge; der Referenztermin hält die Gelenkstellung in der Nähe der nominalen Pose.
+
+\subsubsection{Vertikale Geschwindigkeit ($r_{\text{lin\_vel\_z}}$)}
+\begin{equation}\label{eq:nav_lin_vel_z}
+r_{\text{lin\_vel\_z}} = -v_z^2
+\end{equation}
+Der Term bestraft vertikales Hüpfen und senkt damit unkontrollierte Sprungbewegungen in den bodengebundenen Stufen.
+
+\subsection{Zielansteuerung und Hindernisvermeidung (Stufen 3 und 4)}
+
+In den zielorientierten Stufen ist die Anzahl der Hindernisse auf zwei beschränkt: ein Blockadehindernis (Index $0$) und das Zielobjekt (Index $1$). Alle Ziel- und Hindernisterme verwenden eine gemeinsame Zielterminierungsradie $R_{\text{goal}} = 0{,}7\,\text{m}$ (\verb|GOAL_TERMINATION_RADIUS|).
+
+\subsubsection{Fortschritt in Zielrichtung ($r_{\text{target\_progress}}$)}
+\begin{equation}\label{eq:nav_target_progress}
+r_{\text{target\_progress}} = \operatorname{clamp}\!\left(\mathbf{v}_{xy}\cdot\hat{d}_{\text{target}},\, 0,\, 2{,}0\right)\cdot \ind[d_{\text{target}} \ge R_{\text{goal}}]
+\end{equation}
+wobei $\hat{d}_{\text{target}} = (\mathbf{p}_{\text{target}}-\mathbf{p}_{\text{robot}})/d_{\text{target}}$ den Einheitsvektor in Richtung des Ziels und $d_{\text{target}} = \lVert \mathbf{p}_{\text{target}}-\mathbf{p}_{\text{robot}}\rVert_2$ den Zielabstand bezeichnen. Der Term belohnt ausschließlich die auf das Ziel projizierte Geschwindigkeit (Ansatzgeschwindigkeit), nicht die rohe euklidische Distanzänderung, wodurch seitliche Scheinbewegungen nicht belohnt werden. Innerhalb des Zielradius wird der Term ausgeblendet, um Doppelbelohnung zu vermeiden.
+
+\subsubsection{Zielannäherung ($r_{\text{target\_proximity}}$)}
+\begin{equation}\label{eq:nav_target_prox}
+r_{\text{target\_proximity}} = \Big(0{,}2\,r_{\text{lin}} + 0{,}35\,r_{\text{exp}} + 0{,}45\,r_{\text{prec}}\Big)\, \eta_{\text{edge}}
+\end{equation}
+mit
+\begin{align}
+r_{\text{lin}} &= \operatorname{clamp}\!\left(1 - \tfrac{d_{\text{target}}}{12{,}0},\,0,\,1\right), \\
+r_{\text{exp}} &= \exp\!\left(-\tfrac{d_{\text{target}}}{1{,}1}\right), \\
+r_{\text{prec}} &= \left(\operatorname{clamp}\!\left(\tfrac{2{,}0-d_{\text{target}}}{\max(2{,}0-R_{\text{goal}},\,\varepsilon)},\,0,\,1\right)\right)^{3}, \\
+\eta_{\text{edge}} &= \operatorname{clamp}\!\left(\tfrac{d_{\text{target}}-R_{\text{goal}}}{0{,}08},\,0,\,1\right).
+\end{align}
+Die Kombination aus einem linearen Fernanreiz ($r_{\text{lin}}$), einer exponentiellen Mittelstrecken-Anziehung ($r_{\text{exp}}$) und einer kubischen Präzisionsrampe im letzten Anflugfenster ($r_{\text{prec}}$) liefert ein kontinuierliches Gradientenfeld über den gesamten Arbeitsraum. Der Kantenfaktor $\eta_{\text{edge}}$ vermeidet eine harte Diskontinuität an der Zielgrenze.
+
+\subsubsection{Zielerreichungs-Bonus ($r_{\text{target\_reached}}$)}
+\begin{equation}\label{eq:nav_target_reached}
+r_{\text{target\_reached}} = \ind\!\left[d_{\text{target}} \le R_{\text{goal}}\right]
+\end{equation}
+Der binäre Terminal-Bonus (Wert $1{,}0$ in der Implementierung) belohnt das Erreichen der Zielzone und motiviert den Abschluss der Episode. Der hohe Konfigurationswert $w_{\text{target\_reached}}=18\dots 30$ in \autoref{tab:nav_reward_weights} macht diesen einmaligen Bonus zum dominierenden Anreiz in den Zielstufen.
+
+\subsubsection{Zielausrichtung ($r_{\text{goal\_heading}}$)}
+\begin{equation}\label{eq:nav_goal_heading}
+r_{\text{goal\_heading}} = \cos\psi_{\text{goal}} \in [-1,1]
+\end{equation}
+Hierbei bezeichnet $\psi_{\text{goal}}$ den Winkel zwischen der Blickrichtung des Roboters und der Zielrichtung. Der Term wirkt permanent und unterstützt die Neuausrichtung nach dem Umfahren des Blockadehindernisses.
+
+\subsubsection{Schneller Abschluss ($r_{\text{fast\_completion}}$)}
+\begin{equation}\label{eq:nav_fast_completion}
+r_{\text{fast\_completion}} = \frac{T_{\max} - t_{\text{ep}}}{T_{\max}}\cdot \ind[d_{\text{target}} \le R_{\text{goal}}]
+\end{equation}
+mit der maximalen Episodenlänge $T_{\max}$ und der verbrauchten Zeit $t_{\text{ep}}$. Der Term belohnt ausschließlich bei Zielerreichung schnelleres Abschließen mit einem Bonus zwischen $0$ (langsam) und $1$ (sehr schnell).
+
+\subsubsection{Passage über das Blockadehindernis ($r_{\text{blocker\_clearance}}$)}
+\begin{equation}\label{eq:nav_blocker_clearance}
+r_{\text{blocker\_clearance}} = \operatorname{clamp}\!\left(x_{\text{robot}} - x_{\text{blocker}},\, 0,\, 2{,}0\right)
+\end{equation}
+Der Term füllt die Belohnungslücke während des seitlichen Ausweichmanövers: Er feuert kontinuierlich, sobald die $x$-Koordinate des Roboters die des Blockadehindernisses überschreitet, und gibt dadurch einen Gradienten, der das Ausweichmanöver zu Ende führt statt zurückzuweichen.
+
+\subsubsection{Mittellinien-Strafe nahe dem Hindernis ($r_{\text{centerline\_near\_blocker}}$)}
+\begin{equation}\label{eq:nav_centerline_penalty}
+r_{\text{centerline\_near\_blocker}} = \operatorname{clamp}\!\left(|y_{\text{robot}}-y_{\text{blocker}}| - y_{\text{tol}},\, 0,\, 2{,}0\right)\cdot \gamma_{\text{prox}}\cdot \ind[x_{\text{robot}} \le x_{\text{blocker}}+m_x]
+\end{equation}
+mit dem Näherungsfaktor $\gamma_{\text{prox}} = \operatorname{clamp}(1 - x_{\text{prox}}/x_{\text{win}},0,1)$, der Nähe zum Blockadehindernis, der lateralen Toleranz $y_{\text{tol}}=0{,}2\,\text{m}$, dem seitlichen Erfolgsrand $m_x=0{,}25\,\text{m}$ und dem Penalty-Fenster $x_{\text{win}}=1{,}8\,\text{m}$. Der Term bestraft übermäßiges Seitwärts-Ausscheren in der Nähe des Hindernisses vor dessen tatsächlicher Überquerung und unterdrückt dadurch ineffiziente Umwege.
+
+\subsubsection{Hinderniskollision ($r_{\text{obstacle\_avoidance}}$)}
+\begin{equation}\label{eq:nav_obstacle_avoidance}
+r_{\text{obstacle\_avoidance}} = \sum_{\text{obs}} \Big(-1{,}0\,\ind[d_{\text{obs}}<r_{\text{coll}}] - 0{,}1\,\ind[r_{\text{coll}}\le d_{\text{obs}}<r_{\text{safe}}]\Big)
+\end{equation}
+mit dem Kollisionsradius $r_{\text{coll}}$ und dem Sicherheitsradius $r_{\text{safe}}$ je Hindernistyp (niedrig: $0{,}1/0{,}3\,\text{m}$; hoch: $0{,}3/0{,}8\,\text{m}$). Kollisionen werden hart ($-1{,}0$), Zunäherung weich ($-0{,}1$) bestraft.
+
+\subsection{Sprungphasenbasierte Terme (Stufe 4)}
+
+Die Sprungtermine sind in drei Phasen gegliedert (Annäherung, Absprung, Flug) und zusätzlich durch eine Landestabilitätsbelohnung ergänzt. Sie gelten für das Blockadehindernis (Index $0$), dessen aktuelle Höhe $h_{\text{obs}}$ über das Sprung-Curriculum schrittweise erhöht wird.
+
+\subsubsection{Sprungannäherung ($r_{\text{jump\_approach}}$)}
+\begin{equation}\label{eq:nav_jump_approach}
+r_{\text{jump\_approach}} = \operatorname{clamp}\!\left(\tfrac{z_{\text{base}}-z_{\text{stand}}}{h_{\text{obs}}},\,0,\,1\right)\exp\!\left(-\tfrac{d_{\text{obs}}}{1{,}5\,\text{m}}\right)\cdot \ind[x_{\text{robot}}\le x_{\text{blocker}}+m_x]
+\end{equation}
+mit der Standhöhe $z_{\text{stand}} = 0{,}42\,\text{m}$, dem euklidischen Abstand $d_{\text{obs}}$ zum Hindernis und dem Sicherheitsrand $m_x=0{,}25\,\text{m}$. Der Term belohnt gleichzeitig die Annäherung (exponentielle Nähe) und die Erhöhung des Rumpfes (Höhenpotential, Ng-et-al.-Shaping) und stoppt nach Überqueren des Hindernisses, um wiederholtes Hüpfen nach Abschluss des Manövers zu verhindern.
+
+\subsubsection{Absprungdynamik ($r_{\text{jump\_takeoff}}$)}
+\begin{equation}\label{eq:nav_jump_takeoff}
+\begin{aligned}
+r_{\text{jump\_takeoff}} ={}& \operatorname{clamp}\!\left(v_z^2,\,0,\,4{,}0\right)\, \ind[d_{\text{obs}}<0{,}8\,\text{m}]\, \ind[v_z>0{,}3\,\text{m/s}] \\
+&\cdot \ind[x_{\text{robot}}\le x_{\text{blocker}}+m_x]\, \ind[|y_{\text{robot}}-y_{\text{blocker}}|\le y_{\text{tol}}]
+\end{aligned}
+\end{equation}
+Der Term bewertet eine explosive (als $v_z^2$, also Leistung), zentrierte und unmittelbar an der Hinderniswand stattfindende Aufwärtsbewegung. Die enge Torung auf $d_{\text{obs}}<0{,}8\,\text{m}$ und $v_z>0{,}3\,\text{m/s}$ verhindert, dass normales Trab-Hüpfen fälschlich belohnt wird.
+
+\subsubsection{Flugphase ($r_{\text{jump\_flight}}$)}
+\begin{equation}\label{eq:nav_jump_flight}
+\begin{aligned}
+r_{\text{jump\_flight}} ={}& \operatorname{clamp}\!\left(z_{\text{base}} - z_{\text{clear}},\,0,\,0{,}3\right)\cdot\operatorname{clamp}\!\left(1+v_x,\,0{,}5,\,2{,}5\right) \\
+& \cdot\ind[d_{\text{obs}}<1{,}5\,\text{m}]\, \ind[z_{\text{base}}>z_{\text{clear}}] \\
+& \cdot \ind[x_{\text{robot}}\le x_{\text{blocker}}+m_x]\, \ind[|y_{\text{robot}}-y_{\text{blocker}}|\le y_{\text{tol}}]
+\end{aligned}
+\end{equation}
+mit der Durchflughöhe $z_{\text{clear}} = 0{,}42\,\text{m} + 0{,}5\,h_{\text{obs}}$, da der Schwerpunkt eines Vierbeiners beim Überwinden eines Hindernisses nur um etwa die halbe Hindernishöhe steigt. Der Höhenbonus (bis $0{,}3\,\text{m}$ über der Durchflughöhe) und ein Vorwärtsbonus $(1+v_x)$ belohnen einen hohen, kontrollierten und mit Vorwärtsimpuls ausgeführten Flug über das Hindernis.
+
+\subsubsection{Landestabilität ($r_{\text{landing\_stability}}$)}
+\begin{equation}\label{eq:nav_landing_stability}
+r_{\text{landing\_stability}} = \exp\!\left(-2\,\lVert \boldsymbol{\omega}\rVert_2\right)\cdot \beta \cdot \ind[\text{Landephase}\wedge d_{\text{obs}}<1{,}4\,\text{m}]
+\end{equation}
+wobei $\boldsymbol{\omega}$ den Winkelgeschwindigkeitsvektor und $\beta\in\{0{,}3,0{,}5\}$ den Skalierungsfaktor während des Sinkens ($\beta=0{,}3$) bzw. nach der Landung ($\beta=0{,}5$) bezeichnet. Der Term belohnt eine ruhige, wenig rotierende Landung nahe dem Hindernis.
+
+\subsection{Stufenabhängige Gewichtung der Navigationsterme}
+
+\autoref{tab:nav_reward_weights} fasst die in \texttt{go2\_train\_navigation.py} gesetzten Konfigurationswerte $w_i$ für die vier experimentell ausgewerteten Navigationsstufen (Stufe 1 Stand, Stufe 2 Laufen, Stufe 3 Zielansteuerung mit Hindernis, Stufe 4 Springen) zusammen. Nicht aufgeführte Terme sind in der jeweiligen Stufe deaktiviert ($w_i = 0$). Die effektive Belohnung pro Zeitschritt beträgt jeweils $w_i\cdot\Delta t\cdot r_{i,t}$.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Konfigurierte Gewichtungsfaktoren $w_i$ der Navigationsterme je Curriculum-Stufe (aus \texttt{go2\_train\_navigation.py}). Nicht aufgeführte Terme sind in der Stufe deaktiviert.}
+\label{tab:nav_reward_weights}
+\begin{tabular}{lcccc}
+\hline
+Term & Stufe 1 (Stand) & Stufe 2 (Laufen) & Stufe 3 (Navigation) & Stufe 4 (Springen) \\
+\hline
+$r_{\text{tracking\_lin\_vel}}$ & 0 & 4,0 & 0 & 1,5 \\
+$r_{\text{tracking\_ang\_vel}}$ & 0 & 0 & 0 & 0,4 \\
+$r_{\text{forward\_movement}}$ & 0 & 1,5 & 0 & 1,0 \\
+$r_{\text{keep\_moving}}$ & 0 & 0 & 0,1 & 0 \\
+$r_{\text{straight\_walk\_when\_clear}}$ & 0 & 0 & 0 & 0 \\
+$r_{\text{height}}$ & 3,0 & 1,5 & 0,2 & 0 \\
+$r_{\text{upright}}$ & 5,0 & 2,5 & 0,5 & 2,0 \\
+$r_{\text{symmetry}}$ & 0 & $-0{,}15$ & $-0{,}01$ & $-0{,}08$ \\
+$r_{\text{action\_rate}}$ & $-0{,}05$ & $-0{,}15$ & $-0{,}05$ & $-0{,}01$ \\
+$r_{\text{similar\_to\_default}}$ & $-0{,}1$ & $-0{,}1$ & $-0{,}01$ & $-0{,}04$ \\
+$r_{\text{lin\_vel\_z}}$ & $-0{,}2$ & $-0{,}2$ & $-0{,}1$ & 0 \\
+$r_{\text{target\_progress}}$ & 0 & 0 & 10,0 & 6,0 \\
+$r_{\text{target\_proximity}}$ & 0 & 0 & 8,0 & 2,0 \\
+$r_{\text{target\_reached}}$ & 0 & 0 & 30,0 & 18,0 \\
+$r_{\text{goal\_heading}}$ & 0 & 0 & 3,0 & 1,5 \\
+$r_{\text{fast\_completion}}$ & 0 & 0 & 10,0 & 6,0 \\
+$r_{\text{blocker\_clearance}}$ & 0 & 0 & 3,0 & 1,5 \\
+$r_{\text{centerline\_near\_blocker}}$ & 0 & 0 & 0 & $-25{,}0$ \\
+$r_{\text{obstacle\_avoidance}}$ & 0 & 0 & 5,0 & 0 \\
+$r_{\text{jump\_approach}}$ & 0 & 0 & 0 & 2,0 \\
+$r_{\text{jump\_takeoff}}$ & 0 & 0 & 0 & 12,0 \\
+$r_{\text{jump\_flight}}$ & 0 & 0 & 0 & 25,0 \\
+$r_{\text{landing\_stability}}$ & 0 & 0 & 0 & 4,0 \\
+\hline
+\end{tabular}
+\end{table}
+
+Es zeigt sich der stufenabhängige Schwerpunkt: In der Standstufe dominieren $r_{\text{upright}}$ und $r_{\text{height}}$, in der Laufstufe das Geschwindigkeitstracking, in der Zielstufe die Ziel- und Hindernisterme ($r_{\text{target\_reached}}$, $r_{\text{target\_progress}}$, $r_{\text{obstacle\_avoidance}}$) und in der Sprungstufe die phasenbasierten Sprungterme ($r_{\text{jump\_flight}}$ mit $w=25$ ist der höchste Einzelwert), flankiert von der starken Mittellinien-Strafe.
+
+\section{Belohnungsfunktionen der Interaktionsumgebung (Petting)}
+
+Die Interaktionsumgebung belohnt ein taktiles Reaktionsverhalten (Geste bei Berührung am Kopf) bei gleichzeitiger Gewährleistung von Standstabilität. \autoref{tab:pet_reward_weights} fasst die Gewichtungen zusammen.
+
+\subsection{Taktile Kontaktreaktion und Gesten}
+
+\subsubsection{Geste während aktiver Berührung ($r_{\text{gesture\_during\_touch}}$)}
+\begin{equation}\label{eq:pet_gesture_during_touch_math}
+r_{\text{gesture\_during\_touch}} = \ind[\text{Hand\_auf\_Roboter} \wedge \text{gesture\_active}] \cdot \frac{T_{\text{gest}} - t_{\text{gest}}}{T_{\text{gest}}}
+\end{equation}
+wobei $T_{\text{gest}}=100$ ($2\,\text{s}$ bei $50\,\text{Hz}$) die Gestendauer und $t_{\text{gest}}$ den bereits verstrichenen Gesteanteil bezeichnen. Der Term belohnt ausschließlich eine Geste, während die Hand den Roboter berührt, und skaliert mit dem Fortschritt der Geste für gleichmäßiges Lernen.
+
+\subsubsection{Gestenbewegung ($r_{\text{gesture\_movement}}$)}
+\begin{equation}\label{eq:pet_gesture_movement_math}
+r_{\text{gesture\_movement}} = \ind[\text{gesture\_active}]\, s_{\text{stand}}(h,\phi)\, \sum_{j\in J_g}|\dot q_{j,t}|
+\end{equation}
+Dabei bezeichnet $J_g$ die sechs vorderen Gelenke (FR/FL: Hüfte, Oberschenkel, Unterschenkel) sowie die beiden hinteren Hüftgelenke. Der Standfaktor $s_{\text{stand}}(h,\phi)$ nutzt die minimale Höhe aus Vorder- und Hinterkörper (zur Vermeidung geneigten Sitzens): Er steigt linear von null bei $0{,}35\,\text{m}$ auf eins bei $0{,}40\,\text{m}$. Der Term bewertet den Bewegungsbetrag der Gestengelenke während der Geste, nicht eine Solltrajektorie.
+
+\subsubsection{Berührungsreaktion ($r_{\text{petting\_response}}$)}
+\begin{equation}\label{eq:pet_response_math}
+r_{\text{petting\_response}} = \frac{T_{\text{gest}} - t_{\text{gest}}}{T_{\text{gest}}} \cdot \ind[\text{gesture\_active}]
+\end{equation}
+Der Term ist in der für die ausgewerteten Läufe verwendeten Konfiguration deaktiviert ($w=0$), da er durch $r_{\text{gesture\_during\_touch}}$ ersetzt wurde; er ist aus Kompatibilitätsgründen noch in der Implementierung vorhanden.
+
+\subsubsection{Sitz- und Liegeverbot ($r_{\text{no\_sitting}}$)}
+\begin{equation}\label{eq:pet_no_sitting_math}
+r_{\text{no\_sitting}} = \begin{cases}
+	1{,}0, & \text{wenn } q_{\mathrm{RR,thigh}}>1{,}5\,\text{rad} \,\lor\, q_{\mathrm{RL,thigh}}>1{,}5\,\text{rad} \\
+	1{,}0, & \text{wenn } h_{\text{base}}<0{,}35\,\text{m} \\
+	0{,}0, & \text{sonst}
 \end{cases}
-]
-(
-v
-forward
-v 
-forward
-​
-= Vorwärtsgeschwindigkeit)
+\end{equation}
+Bestraft das passive Zusammensacken auf den Boden bzw. übermäßig gebeugte hintere Oberschenkel ($w = -10{,}0$). In der Implementierung werden die Gewichtung und die Boolesche Aktivierung über die negativen Konfigurationswerte zusammengeführt.
 
-Bewegung allgemein:
-[
-r_{\text{keep_moving}} = \text{clamp}(|v_{xy}|, 0, 2.0) + \begin{cases}
-	-1.0, & |v_{xy}| < 0.1 \
-	0, & \text{sonst}
-\end{cases}
-]
-(
-∥
-v
-x
-y
-∥
-∥v 
-xy
-​
-∥ = Geschwindigkeit in XY-Ebene)
+\subsection{Stabilitäts- und Haltungsterme}
 
-Blocker Clearance:
-[
-r_{\text{blocker_clearance}} = \text{clamp}(x_{\text{robot}} - x_{\text{blocker}}, 0, 2.0)
-]
+\subsubsection{Petting-Stabilität ($r_{\text{petting\_stability}}$)}
+\begin{equation}\label{eq:pet_stability_math}
+r_{\text{petting\_stability}} = \exp\!\left(-\left(\lVert \boldsymbol{\omega}\rVert_2 + 5\,|h_{\text{base}}-h_{\text{target}}|\right)\right)\cdot \frac{\min(t_{\text{gest}},T_{\text{gest}})}{T_{\text{gest}}}
+\end{equation}
+Der Term belohnt geringe Winkelgeschwindigkeit und geringe Höhenabweichung, skaliert mit dem Gesteanteil.
 
-Centerline Penalty:
-[
-r_{\text{centerline}} = \text{lateral_overrun} \cdot \text{proximity} \cdot \text{before_cross}
-]
-(siehe Code für Details zu den Faktoren)
+\subsubsection{Flexible Körperhöhe ($r_{\text{flexible\_height}}$)}
+\begin{equation}\label{eq:pet_flexible_height_math}
+r_{\text{flexible\_height}} = \exp\!\left(-10\cdot\operatorname{clamp}\!\left(|h_{\text{base}} - h_{\text{target}}(t)| - \epsilon_h,\,0,\,\infty\right)\right),\quad
+h_{\text{target}}(t) = \begin{cases} 0{,}40\,\text{m}, & \text{Geste aktiv} \\ 0{,}42\,\text{m}, & \text{sonst} \end{cases}
+\end{equation}
+mit $\epsilon_h = 0{,}02\,\text{m}$. Der Term erzwingt bei aktiver Geste eine Standhöhe von $0{,}40\,\text{m}$, sonst die nominale Höhe von $0{,}42\,\text{m}$.
 
-Höhenkontrolle:
-[
-r_{\text{height}} = \exp\left(-10 \cdot \max(|h_{\text{base}} - h_{\text{target}}| - \text{tolerance}, 0)\right)
-]
+\subsubsection{Aufrechte Orientierung ($r_{\text{upright}}$) und Referenzpose ($r_{\text{similar\_to\_default}}$), Aktionsterm ($r_{\text{action\_rate}}$), $r_{\text{lin\_vel\_z}}$}
+Diese Terme stimmen in ihrer Formulierung mit den in \autoref{eq:nav_upright_term}, \autoref{eq:nav_action_rate}, \autoref{eq:nav_similar_to_default} und \autoref{eq:nav_lin_vel_z} definierten Basis- und Navigationsdefinitionen überein; in der Interaktionsumgebung werden sie jedoch mit den Werten aus \autoref{tab:pet_reward_weights} gewichtet. Zusätzlich sind in der Implementierung die Terme $r_{\text{movement\_when\_touched}} = \lVert\dot{\mathbf{q}}\rVert_2\cdot\ind[\text{Hand\_auf\_Roboter}]$ und $r_{\text{stillness\_without\_touch}} = \exp(-2\lVert\dot{\mathbf{q}}\rVert_2)\cdot\ind[\neg\text{Hand\_auf\_Roboter}]$ definiert; sie sind in der ausgewerteten Konfiguration deaktiviert ($w=0$) und dienen alternativen Gestaltungsvarianten.
 
-Symmetrie:
-[
-r_{\text{symmetry}} = -\left(\text{hip_sym} + \text{thigh_sym} + \text{calf_sym}\right)
-]
-(Summe der absoluten Differenzen der Gelenkwinkel zwischen linker und rechter Seite)
+\begin{table}[htbp]
+\centering
+\small
+\caption{Konfigurierte Gewichtungsfaktoren $w_i$ der Interaktionsterme (aus \texttt{go2\_train\_petting.py}).}
+\label{tab:pet_reward_weights}
+\begin{tabular}{lc}
+\hline
+Term & $w_i$ \\
+\hline
+$r_{\text{gesture\_during\_touch}}$ & 2,0 \\
+$r_{\text{gesture\_movement}}$ & 1,0 \\
+$r_{\text{petting\_response}}$ & 0 \\
+$r_{\text{petting\_stability}}$ & 5,0 \\
+$r_{\text{flexible\_height}}$ & 5,0 \\
+$r_{\text{upright}}$ & 10,0 \\
+$r_{\text{no\_sitting}}$ & $-10{,}0$ \\
+$r_{\text{tracking\_lin\_vel}}$ & 0 \\
+$r_{\text{tracking\_ang\_vel}}$ & 0 \\
+$r_{\text{lin\_vel\_z}}$ & 0 \\
+$r_{\text{action\_rate}}$ & $-0{,}1$ \\
+$r_{\text{similar\_to\_default}}$ & $-0{,}05$ \\
+\hline
+\end{tabular}
+\end{table}
 
-Petting-/Interaktionsumgebung
-Die Gesamtbelohnung 
-r
-t
-r 
-t
-​
-setzt sich aus folgenden Komponenten zusammen:
+In der Interaktionsumgebung dominieren die Stabilitäts- und Haltungsterme ($r_{\text{upright}}$, $r_{\text{petting\_stability}}$, $r_{\text{flexible\_height}}$), während die Geste $r_{\text{gesture\_during\_touch}}$ und $r_{\text{gesture\_movement}}$ das taktile Reaktionsverhalten motivieren.
 
-[
-r_t = w_1 \cdot r_{\text{petting_response}} + w_2 \cdot r_{\text{gesture_during_touch}} + w_3 \cdot r_{\text{gesture_movement}} + w_4 \cdot r_{\text{no_sitting}} + w_5 \cdot r_{\text{stability}} + w_6 \cdot r_{\text{flexible_height}} + w_7 \cdot r_{\text{upright}}
-]
+\section{Analyse von Reward Hacking und unerwünschtem Verhalten}
 
-Beispielhafte Teilbelohnungen:
+Beim iterativen Entwurf der Belohnungsfunktionen traten mehrere klassische Fehloptimierungen (Reward Hacking) auf, die durch gezielte Restrukturierung behoben werden mussten:
 
-Petting Response:
-[
-r_{\text{petting_response}} = \begin{cases}
-	\text{progress}, & \text{wenn Geste aktiv} \
-	0, & \text{sonst}
-\end{cases}
-]
-(
-progress
-progress = Fortschritt der Geste)
-
-Geste während Berührung:
-[
-r_{\text{gesture_during_touch}} = \begin{cases}
-	\text{progress}, & \text{wenn Hand auf Roboter und Geste aktiv} \
-	0, & \text{sonst}
-\end{cases}
-]
-
-Gelenkbewegung während Geste:
-[
-r_{\text{gesture_movement}} = \text{gesture_active} \cdot \text{standing_multiplier} \cdot \sum |\dot{q}{\text{gesture}}|
-]
-($\dot{q}{\text{gesture}}$ = Gelenkgeschwindigkeiten der Gesten-Gelenke)
-
-Sitzstrafe:
-[
-r_{\text{no_sitting}} = 1.0 \cdot (\text{sitting} \lor \text{base_too_low})
-]
-
-Stabilität:
-[
-r_{\text{stability}} = \exp\left(-(|\omega_{\text{base}}| + |h_{\text{base}} - h_{\text{target}}| \cdot 5)\right) \cdot \text{gesture_active}
-]
-
-Flexible Höhe:
-[
-r_{\text{flexible_height}} = \exp\left(-10 \cdot \max(|h_{\text{base}} - h_{\text{target}}| - 0.02, 0)\right)
-]
-
-Aufrecht stehen:
-[
-r_{\text{upright}} = \exp\left(-5 \cdot (|\text{roll}| + |\text{pitch}|)\right)
-]
+\begin{enumerate}
+	\item \textbf{Ziel-Stillstand (Goal Camping):} Wurde der Zielannäherungsterm $r_{\text{target\_proximity}}$ ohne einmaligen Terminal-Bonus und ohne Episodenabschluss vergeben, verharrte der Roboter unmittelbar am Rand der Zielzone, um endlos positive Teilbelohnungen ohne das Risiko eines Übertritts oder einer Kurskorrektur zu akkumulieren. Die Kopplung mit $r_{\text{target\_reached}}$ und dem Terminierungsradius $R_{\text{goal}}$ behebt dieses Verhalten.
+	\item \textbf{Seltene erfolgreiche Sprungsequenzen:} Die Sprungtermine sind an enge Bedingungen für Abstand, Höhe, Geschwindigkeit und laterale Zentrierung gebunden. Ein vollständiger erfolgreicher Sprung erzeugt daher nur in einer kleinen Trefferregion ein zusammenhängendes Lernsignal, während Lauf- und Stabilitätsterme kontinuierlich aktiv bleiben. Die phasenbasierte Aufteilung ($r_{\text{jump\_approach}}$, $r_{\text{jump\_takeoff}}$, $r_{\text{jump\_flight}}$) und die Landestabilität liefern dabei ein dichtes Teil-Lernsignal über den gesamten Sprungverlauf.
+	\item \textbf{Partielle Gestenbewegung:} Der Gestenbewegungsreward $r_{\text{gesture\_movement}}$ bewertet Gelenkgeschwindigkeitsbeträge, nicht aber eine Solltrajektorie oder deren Abschluss. Zusammen mit starken Stabilitätsrewards kann dies eine kurze Bewegung gegenüber einer vollständigen Geste begünstigen. Ohne Ablation ist dies eine plausible Erklärung, kein eindeutiger Nachweis von Reward Hacking.
+	\item \textbf{Gelenk-Gait-Pendeln beim Sprungansatz:} In früheren Iterationen konnte eine periodische Gang-Oszillation (Gait Bouncing) die alte Absprungbedingung erfüllen, ohne einen echten Sprung auszuführen. Durch die enge Torung von $r_{\text{jump\_takeoff}}$ auf $d_{\text{obs}}<0{,}8\,\text{m}$ und $v_z>0{,}3\,\text{m/s}$ sowie durch die Bewertung als $v_z^2$ wurde dieses Verhalten unterdrückt.
+\end{enumerate}

@@ -1,0 +1,302 @@
+\chapter{Glossar}\label{ch:glossar}
+
+Dieses Glossar erklärt zentrale Fachbegriffe und Konzepte, die in dieser Arbeit verwendet werden. Die Definitionen sind prägnant gehalten und verlinken auf die relevanten Kapitel und Anhänge für tiefergehende Informationen.
+
+\section*{A}
+
+\vspace{0.3cm}
+\noindent\textbf{Aktion (Action)} \\
+Die vom Agenten in einem gegebenen Zustand ausgewählte Steueraktion. In dieser Arbeit erzeugt die Policy 12 kontinuierliche Aktionswerte, die skaliert und als Gelenkpositionsziele an PD-Regler übergeben werden. Siehe auch \autoref{sec:rl_basics}.
+
+\vspace{0.5cm}
+\noindent\textbf{Agent} \\
+Ein autonomes Entitäten-System, das die Umgebung beobachtet, Aktionen ausführt und von Belohnungssignalen lernt. In dieser Arbeit verkörpert der Unitree Go2 Roboter in der Genesis-Simulation den Agenten. Siehe auch \autoref{sec:rl_basics}.
+
+\vspace{0.5cm}
+\noindent\textbf{Aktivierungsfunktion (Activation Function)} \\
+Eine nichtlineare mathematische Funktion in neuronalen Netzen, die die Ausgabe der Neuronen transformiert. In dieser Arbeit wird ELU als primäre Aktivierungsfunktion verwendet. Siehe auch \autoref{dl_explain}.
+
+\section*{B}
+
+\vspace{0.3cm}
+\noindent\textbf{Backpropagation} \\
+Ein Algorithmus zur Berechnung von Gradienten in neuronalen Netzen mittels der Kettenregel der Differentialrechnung. Ermöglicht effizientes Training von tiefen Netzwerken. Siehe auch \autoref{dl_explain}.
+
+\vspace{0.5cm}
+\noindent\textbf{Batch} \\
+Eine Sammlung von Trainingsdaten oder Episoden, die in einem Gradient-Schritt des Lernalgorithmus verarbeitet werden. In PPO typischerweise 32–64 Episoden pro Batch.
+
+\vspace{0.5cm}
+\noindent\textbf{Bellman-Gleichung} \\
+Eine zentrale rekursive Gleichung in Reinforcement Learning, die den Zusammenhang zwischen Wertfunktionen zu verschiedenen Zeitschritten beschreibt. Sie bildet die Grundlage für viele RL-Algorithmen. Siehe auch \autoref{MDP}.
+
+\vspace{0.5cm}
+\noindent\textbf{Belohnung (Reward)} \\
+Ein numerisches Signal, das die Qualität einer Aktion in einem gegebenen Zustand angibt. Neuronale Netze lernen, diese Belohnungen zu maximieren. In dieser Arbeit setzt sich die Belohnung aus mehreren gewichteten Komponenten zusammen. Siehe \autoref{ch:reward_function_maths}.
+
+\vspace{0.5cm}
+\noindent\textbf{Belohnungsformung (Reward Shaping)} \\
+Die Gestaltung und Gewichtung der einzelnen Komponenten einer Belohnungsfunktion, um das Lernverhalten zu steuern. Ein kritischer Aspekt der Aufgabenstellung in dieser Arbeit. Siehe \autoref{sec:reward_shaping} und \autoref{ch:reward_function_maths}.
+
+\section*{C}
+
+\vspace{0.3cm}
+\noindent\textbf{Clipping} \\
+Eine Technik in PPO, die die Größe von Policy-Updates begrenzt, um Stabilität zu gewährleisten. Der Clipping-Parameter $\epsilon$ ist typischerweise 0,2.
+
+\vspace{0.5cm}
+\noindent\textbf{Continuous Control} \\
+Steuerung eines Systems mit kontinuierlichen (nicht-diskreten) Aktionsräumen. In dieser Arbeit sind es 12 kontinuierliche Aktionswerte für die Gelenkpositionsziele der PD-Regler. Siehe \autoref{sec:rl_basics}.
+
+\vspace{0.5cm}
+\noindent\textbf{Curriculum Learning} \\
+Ein Trainingsansatz, bei dem die Aufgabenschwierigkeit schrittweise gesteigert wird. In dieser Arbeit: Stand → Laufen → Navigation → Springen. Ermöglicht stabileres und schnelleres Lernen komplexer Verhaltensweisen. Siehe \autoref{ch:methods}.
+
+\section*{D}
+
+\vspace{0.3cm}
+\noindent\textbf{Deep Learning} \\
+Maschinelles Lernen mit neuronalen Netzen mit mehreren Verarbeitungsschichten, die automatisch hierarchische Darstellungen lernen. Siehe \autoref{dl_explain}.
+
+\vspace{0.5cm}
+\noindent\textbf{Deep Reinforcement Learning (DRL)} \\
+Kombination von Deep Learning und Reinforcement Learning: Einsatz tiefer neuronaler Netze zur Approximation von Policies oder Wertfunktionen in RL. Ermöglicht die Verarbeitung hochdimensionaler Sensordaten. Siehe \autoref{ch:theoretical_foundation}.
+
+\vspace{0.5cm}
+\noindent\textbf{Diskontfaktor $\gamma$} \\
+Ein Parameter zwischen 0 und 1, der bestimmt, wie stark zukünftige Belohnungen gegenüber unmittelbaren Belohnungen gewichtet werden. Typischerweise $\gamma = 0.99$. Ein höherer Wert bedeutet „weiter vorausschauen".
+
+\vspace{0.5cm}
+\noindent\textbf{Domain Randomization} \\
+Eine Technik zur Verbesserung der Robustheit, bei der Umgebungsparameter (Masse, Reibung, Farben, etc.) zufällig variiert werden. Nicht in dieser Arbeit eingesetzt. Siehe \autoref{ch:methods}.
+
+\section*{E}
+
+\vspace{0.3cm}
+\noindent\textbf{Entropie (Policy Entropy)} \\
+Ein Maß für die Unsicherheit oder Zufälligkeit einer Policy. Hohe Entropie bedeutet explorative Policy, niedrige Entropie bedeutet deterministische Policy. Wird als diagnostische Metrik während des Trainings verwendet. Siehe \autoref{ch:results}.
+
+\vspace{0.5cm}
+\noindent\textbf{Episode} \\
+Eine Sequenz von Interaktionen zwischen Agent und Umgebung, von Startzustand bis zum Erreichen eines Zielzustands oder Abbruch. In dieser Arbeit: maximal 1000 Schritte pro Episode. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Episodenlänge (Episode Length)} \\
+Die Anzahl der Schritte in einer Episode, bevor sie beendet wird. Ein Indikator für Stabilitätsleistung: längere Episoden deuten auf besseres Verhalten hin. Siehe \autoref{ch:results}.
+
+\vspace{0.5cm}
+\noindent\textbf{Exploration vs. Exploitation} \\
+Zwei komplementäre Strategien: Exploration = Ausprobieren neuer Aktionen (Unsicherheit), Exploitation = Nutzung bekannter guter Aktionen. PPO balanciert diese durch Policy-Entropie. Siehe \autoref{sec:rl_basics}.
+
+\section*{F}
+
+\vspace{0.3cm}
+\noindent\textbf{Feature / Merkmal} \\
+Eine einzelne Information oder Eingabevariable eines neuronalen Netzes. In dieser Arbeit beispielsweise: Gelenkpositionen, Gelenkgeschwindigkeiten, Zielposition, Hindernisstatus.
+
+\vspace{0.5cm}
+\noindent\textbf{Generalisierung} \\
+Die Fähigkeit eines trainierten Modells, auf neue, ungesehene Daten oder Situationen gut zu funktionieren. Ein Hauptziel dieser Arbeit ist das Verständnis, wie weit Generalisierung in Robotik-Aufgaben möglich ist. Siehe \autoref{ch:results} und \autoref{ch:discussion}.
+
+\vspace{0.5cm}
+\noindent\textbf{Gradient / Gradient Descent} \\
+Der Vektor der partiellen Ableitungen einer Funktion. Gradientenabstieg ist ein Optimierungsverfahren, das Parameter iterativ in Richtung negativer Gradienten anpasst, um eine Zielfunktion zu minimieren. Siehe \autoref{dl_explain}.
+
+\vspace{0.3cm}
+\noindent\textbf{Ground Truth} \\
+Die wahre, objektive Realität oder Zielwert. In dieser Arbeit beispielsweise: die tatsächliche Position des Roboters (Ground Truth) im Gegensatz zu seiner Schätzung. Bei visueller Bewertung: das tatsächlich beobachtete Verhalten des Roboters, unabhängig von Metriken.
+
+\section*{H}
+
+\vspace{0.3cm}
+\noindent\textbf{Hidden Layer / Verborgene Schicht} \\
+Eine Schicht eines neuronalen Netzes, die zwischen Ein- und Ausgabeschicht liegt. Extrahiert und transformiert Merkmaldarstellungen. In dieser Arbeit: MLP mit drei Hidden Layern (512, 256 und 128 Neuronen). Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Hyperparameter} \\
+Die Parameter eines Lernalgorithmus, die nicht direkt von den Daten gelernt werden, sondern vom Nutzer festgelegt werden. Beispiele: Lernrate $\alpha$, Diskontfaktor $\gamma$, Netzwerkgröße. Siehe \autoref{ch:methods}.
+
+\section*{I}
+
+\vspace{0.3cm}
+\noindent\textbf{Induktive Voreingenommenheit (Inductive Bias)} \\
+Annahmen oder Strukturen, die in ein Modell eingebaut sind, um das Lernen zu vereinfachen. Beispiel: CNN für Bilder hat den Bias der räumlichen Lokalität.
+
+\vspace{0.5cm}
+\noindent\textbf{IMU (Inertial Measurement Unit)} \\
+Ein Sensor, der Linearbeschleunigung und Winkelgeschwindigkeit misst. Informiert den Roboter über seine Körperorientierung und Dynamik. Im Go2 wesentlich für die Wahrnehmung von Roll, Pitch und Yaw. Siehe \autoref{ch:methods}.
+
+\section*{L}
+
+\vspace{0.3cm}
+\noindent\textbf{Large Language Model (LLM)} \\
+Ein tiefes neuronales Netzwerk, trainiert auf großen Textmengen, das natürliche Sprache verstehen und generieren kann (z.B. GPT, BERT). Siehe \autoref{ch:discussion} im Diskussionskapitel.
+
+\vspace{0.5cm}
+\noindent\textbf{Lernrate (Learning Rate)} \\
+Ein Hyperparameter, der die Größe der Parameter-Updates während des Trainings bestimmt. Typischerweise $\alpha = 3 \times 10^{-4}$. Zu groß: Instabilität; zu klein: langsames Lernen.
+
+\vspace{0.5cm}
+\noindent\textbf{Lokomotion} \\
+Die Fähigkeit eines Roboters, sich fortzubewegen. In dieser Arbeit: Stehen, Gehen, Navigation mit Hindernisvermeidung und Springen. Siehe \autoref{ch:theoretical_foundation}.
+
+\section*{M}
+
+\vspace{0.3cm}
+\noindent\textbf{Markov Decision Process (MDP)} \\
+Ein mathematisches Framework für RL-Probleme. Besteht aus Zustandsraum $\mathcal{S}$, Aktionsraum $\mathcal{A}$, Übergangsfunktion $T$, Belohnungsfunktion $R$ und Diskontfaktor $\gamma$. Siehe \autoref{MDP}.
+
+\vspace{0.5cm}
+\noindent\textbf{Merkmalextraktion (Feature Extraction)} \\
+Der Prozess, relevante Informationen aus Rohdaten (z.B. Sensoren) in eine kompaktere Darstellung umzuwandeln. In dieser Arbeit: Umwandlung von Sensorwerten in Beobachtungsvektoren. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Metriken / Evaluationsmetriken} \\
+Messgrößen zur Bewertung der Leistung eines trainierten Modells. In dieser Arbeit: Return, Episodenlänge, Entropie, Reward-Komponenten sowie visuelle Qualitätsbeurteilung. Siehe \autoref{ch:methods} und \autoref{ch:results}.
+
+\section*{N}
+
+\vspace{0.3cm}
+\noindent\textbf{Neuronales Netzwerk} \\
+Ein computergestütztes Modell, inspiriert von biologischen Neuronen, das aus Schichten von miteinander verbundenen Knoten besteht. Lernt mathematische Funktionen durch Anpassung von Gewichten. Siehe \autoref{dl_explain}.
+
+\vspace{0.5cm}
+\noindent\textbf{Normalverteilung (Gaussian Distribution)} \\
+Eine statistische Verteilung, charakterisiert durch Mittelwert und Standardabweichung. In dieser Arbeit: Die Policy gibt Aktionen als Stichproben aus einer normalverteilten Verteilung aus. Siehe \autoref{ch:methods}.
+
+\section*{O}
+
+\vspace{0.3cm}
+\noindent\textbf{Optimierung / Optimizer} \\
+Ein Algorithmus, der die Parameter eines Modells anpasst, um eine Zielfunktion zu minimieren. Beispiele: Stochastic Gradient Descent (SGD), Adam. In dieser Arbeit: Adam Optimizer. Siehe \autoref{dl_explain}.
+
+\section*{P}
+
+\vspace{0.3cm}
+\noindent\textbf{PD-Regler (Proportional-Derivative Controller)} \\
+Ein klassischer Regelungsalgorithmus basierend auf Proportional- und Ableitungstermen. In dieser Arbeit: Low-Level-Kontrolle der Gelenkpositionen des Go2 mittels PD-Regler. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Policy} \\
+Eine Funktion oder Strategie, die für einen gegebenen Zustand eine Aktion auswählt. Formal: $\pi(a_t | s_t)$ ist die Wahrscheinlichkeit, Aktion $a_t$ im Zustand $s_t$ zu wählen. Das Hauptziel des RL ist, eine optimale Policy zu finden. Siehe \autoref{sec:rl_basics}.
+
+\vspace{0.5cm}
+\noindent\textbf{Policy Gradient} \\
+Eine Familie von RL-Algorithmen, die die Policy direkt durch Gradient-Schätzer optimieren. PPO ist ein Beispiel. Siehe \autoref{sec:rl_basics}.
+
+\vspace{0.5cm}
+\noindent\textbf{Proximal Policy Optimization (PPO)} \\
+Ein weit verbreiteter Policy-Gradient-Algorithmus, der mittels Clipping-Mechanismus stabile Policy-Updates gewährleistet. Der in dieser Arbeit verwendete Lernalgorithmus, eingesetzt gemäß der Referenzimplementierung des Genesis-Frameworks. Siehe \autoref{ss:PPO}.
+
+\section*{Q}
+
+\vspace{0.3cm}
+\noindent\textbf{Q-Funktion} \\
+Die Wertfunktion für Zustand-Aktions-Paare: $Q(s_t, a_t)$ ist der erwartete Return, wenn man Aktion $a_t$ im Zustand $s_t$ ausführt. Siehe \autoref{MDP}.
+
+\vspace{0.5cm}
+\noindent\textbf{Quaternion} \\
+Eine Darstellung von 3D-Rotationen mit 4 Komponenten $(q_w, q_x, q_y, q_z)$. Wird in dieser Arbeit für IMU-Orientierungsdaten des Roboters verwendet und in Euler-Winkel konvertiert. Siehe \autoref{ch:theoretical_foundation}.
+
+\section*{R}
+
+\vspace{0.3cm}
+\noindent\textbf{Return / Episodenrendite} \\
+Die Summe aller diskontier Belohnungen einer Episode: $R_t = \sum_{k=0}^{T-t} \gamma^k r_{t+k}$. Ein Hauptmaß für den Erfolg des Trainings. Siehe \autoref{MDP}.
+
+\vspace{0.5cm}
+\noindent\textbf{ReLU (Rectified Linear Unit)} \\
+Eine Aktivierungsfunktion $f(z) = \max(0, z)$. Standard in modernen Deep Learning. Siehe \autoref{dl_explain}.
+
+\vspace{0.5cm}
+\noindent\textbf{Reinforcement Learning (RL)} \\
+Ein Machine Learning-Paradigma, bei dem ein Agent durch Interaktion mit einer Umgebung und Belohnungssignale lernt. Keine expliziten Zielvorgaben, sondern Trial-and-Error. Siehe \autoref{sec:rl_basics}.
+
+\vspace{0.5cm}
+\noindent\textbf{Reproduzierbarkeit} \\
+Die Fähigkeit, Experimente unter gleichen Bedingungen und mit gleichen Ergebnissen zu wiederholen. In dieser Arbeit: Verwendung von konsistenten Seeds und dokumentierten Hyperparametern. Siehe \autoref{ch:methods}.
+
+\section*{S}
+
+\vspace{0.3cm}
+\noindent\textbf{Seed (Zufallswurzel)} \\
+Ein initialer Wert für Zufallszahlengeneratoren, der reproduzierbare, aber unterschiedliche Trainingsläufe ermöglicht. In dieser Arbeit: Seeds 1, 8, 42, 24, 77. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Sim-to-Real / Simulation-to-Reality Transfer} \\
+Der Prozess, ein in Simulation trainiertes Modell auf einen realen Roboter zu übertragen. Eine zentrale Herausforderung in robotischer RL. In dieser Arbeit nicht durchgeführt, aber als Ausblick erwähnt. Siehe \autoref{ch:discussion}.
+
+\vspace{0.5cm}
+\noindent\textbf{Simulation / Genesis} \\
+Eine virtuelle Umgebung, in der Roboter trainiert werden, ohne physisches Hardware zu benötigen. Diese Arbeit nutzt die Genesis-Plattform. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Sparse Reward} \\
+Ein Belohnungssignal, das selten und spärlich auftritt. Erschwert das Lernen, da Feedback selten ist. Siehe \autoref{ch:discussion}.
+
+\vspace{0.5cm}
+\noindent\textbf{Stabilität (des Trainings)} \\
+Die Eigenschaft eines Lernalgorithmus, konsistent und ohne starke Fluktuationen zu trainieren. Ein Designziel von PPO. Siehe \autoref{ch:discussion}.
+
+\section*{T}
+
+\vspace{0.3cm}
+\noindent\textbf{Tanh (Tangens Hyperbolicus)} \\
+Eine Aktivierungsfunktion ähnlich wie ReLU, die Ausgaben auf $[-1, 1]$ begrenzt. Manchmal für Policy-Ausgaben verwendet. Siehe \autoref{dl_explain}.
+
+\vspace{0.5cm}
+\noindent\textbf{Tensorboard} \\
+Ein Visualisierungstool für Deep Learning, das Trainingsmetriken, Graphen und Bilder protokolliert und darstellt. In dieser Arbeit verwendet zur Überwachung der Trainingsmetriken. Siehe \autoref{ch:results}.
+
+\vspace{0.5cm}
+\noindent\textbf{Timestep / Schritt} \\
+Ein einzelner Interaktionsschritt zwischen Agent und Umgebung (Beobachtung → Aktion → Belohnung → nächster Zustand). Im Go2 bei 50 Hz = 0,02 Sekunden pro Schritt. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Trajectory / Trajektorie} \\
+Eine Sequenz von Zuständen, Aktionen und Belohnungen über die Zeit. Basis für das Lernen in RL. Siehe \autoref{MDP}.
+
+\vspace{0.5cm}
+\noindent\textbf{Transfer Learning} \\
+Die Verwendung von Wissen aus einem trainierten Modell als Ausgangspunkt für ein neues Lernproblem. In dieser Arbeit: Curriculum Learning als eine Form davon. Siehe \autoref{ch:methods}.
+
+\section*{U}
+
+\vspace{0.3cm}
+\noindent\textbf{Unitree Go2 Edu} \\
+Ein kommerzieller vierbeiniger Roboter mit 12 kontrollierten Gelenken (3 pro Bein). Das Robotermodell in dieser Arbeit. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Umgebung (Environment)} \\
+Der Kontext, mit dem ein Agent interagiert. Besteht aus Zustand, Übergängen, Belohnungen. In dieser Arbeit: zwei Umgebungen (Navigation und Petting). Siehe \autoref{ch:methods}.
+
+\section*{V}
+
+\vspace{0.3cm}
+\noindent\textbf{Vektormengenerator} \\
+Ein Netzwerk oder Algorithmus, der für einen Zustand einen kontinuierlichen Vektor (z.B. Aktionen oder Merkmale) generiert. In dieser Arbeit: Die Policy generiert einen Vektor von 12 Gelenkpositionszielen, die als Sollwerte an die PD-Regler übergeben werden.
+
+\vspace{0.5cm}
+\noindent\textbf{Visuelles Feedback / Qualitative Evaluation} \\
+Das Beobachten und Beurteilen von aufgezeichneten Episoden (nicht quantitativ). Primäre Evaluationsmethode in dieser Arbeit. Siehe \autoref{ch:methods} und \autoref{ch:results}.
+
+\section*{W}
+
+\vspace{0.3cm}
+\noindent\textbf{Wertfunktion (Value Function)} \\
+Eine Funktion $V(s_t)$, die den erwarteten Return aus einem Zustand $s_t$ schätzt. Wird verwendet, um Advantage und Baseline in RL zu berechnen. Siehe \autoref{MDP}.
+
+\vspace{0.5cm}
+\noindent\textbf{WholeBody Control (WBC)} \\
+Eine klassische Regelungstechnik, die alle Gelenke eines Roboters koordiniert zur Erfüllung von hochrangigen Zielen. In dieser Arbeit nicht verwendet; erwähnt als Vergleichspunkt im State of the Art. Siehe \autoref{ch:state_of_the_art}.
+
+\section*{Z}
+
+\vspace{0.3cm}
+\noindent\textbf{Zustand (State)} \\
+Die aktuelle Konfiguration der Umgebung, wahrnehmbar durch den Agenten. In dieser Arbeit: Gelenkpositionen, Gelenkgeschwindigkeiten, relative Zielposition, Hindernisinfo, Kontaktsensoren, IMU-Daten. Siehe \autoref{ch:methods}.
+
+\vspace{0.5cm}
+\noindent\textbf{Zustandsraum} \\
+Die Menge aller möglichen Zustände $\mathcal{S}$. In dieser Arbeit: hochdimensional (kontinuierlich), da Zustände aus reellwertigen Sensorwerten bestehen. Siehe \autoref{sec:rl_basics}.
+

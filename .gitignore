@@ -34,3 +34,4 @@ thesis/figures/
 *.bst
 
 thesis.synctex.gz
+.aider*

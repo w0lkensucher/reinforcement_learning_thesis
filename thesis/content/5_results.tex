@@ -1,179 +1,246 @@
 \chapter{Experimentelle Ergebnisse}\label{ch:results}
 
-In diesem Kapitel werden die Ergebnisse der durchgeführten Trainings- und Evaluationsläufe präsentiert und analysiert. Ziel ist es, die Leistungsfähigkeit der trainierten Policies im Hinblick auf Robustheit, Lernfortschritt und Zielerreichung zu bewerten. Dazu werden die wichtigsten Metriken wie durchschnittlicher Return, Erfolgsrate und Kollisionen über mehrere Trainingsläufe mit unterschiedlichen Seeds ausgewertet und sowohl quantitativ als auch qualitativ dargestellt. Die nachfolgenden Abschnitte geben einen Überblick über die erzielten Resultate und diskutieren das beobachtete Verhalten des Roboters in den verschiedenen Curriculum-Stufen.
+In diesem Kapitel werden die experimentellen Ergebnisse der durchgeführten Trainings- und Evaluationsläufe systematisch präsentiert und analysiert. Ziel ist es, die beobachtete Leistungsfähigkeit und Trainingsstabilität der Policies für beide Aufgabenbereiche (Interaktion und Navigation) innerhalb der untersuchten Simulationsszenarien zu bewerten. Aussagen über eine Übertragbarkeit auf unbekannte Umgebungen werden daraus nicht abgeleitet. Die Darstellung beschränkt sich auf die deskriptive Präsentation der Befunde; die interpretative Einordnung, Ursachenanalyse und Bewertung erfolgt gebündelt in \autoref{ch:discussion}.
 
-Für die Bewertung der in der Petting-Umgebung trainierten Policies wurde primär die mittlere Episodenlänge als quantitative Metrik herangezogen. Diese gibt Aufschluss darüber, wie lange der Roboter in der Lage ist, die gewünschte Interaktion, beispielsweise das Ausführen einer Streichelgeste, stabil aufrechtzuerhalten, bevor eine Episode aufgrund von Instabilität oder Abbruchbedingungen endet. Ergänzend erfolgte eine visuelle Auswertung anhand von aufgezeichneten Episoden, um das qualitative Verhalten des Roboters und die Natürlichkeit der ausgeführten Gesten zu beurteilen. Durch die Kombination aus quantitativer und visueller Analyse konnte die Leistungsfähigkeit der Policy in Bezug auf Interaktionsdauer und Bewegungsqualität umfassend bewertet werden.
+Um den Einfluss stochastischer Effekte im Lernprozess abzubilden, wurden alle Experimente über fünf unabhängige Zufalls-Seeds ($N = 5$, konkret Seed 1, Seed 8, Seed 42, Seed 24 und Seed 77) durchgeführt. Die quantitative Leistungsbewertung stützt sich auf die aus den Trainingskurven abgeleiteten Größen (mittlere Episodenlänge $\bar{L}_{\text{ep}}$, Return $R$ und Policy-Entropie $H(\pi)$). Dabei wird der kumulierte Return stets in Relation zu den spezifischen Belohnungstermen und der Episodenlänge betrachtet, um Fehlinterpretationen durch skalenabhängige Reward-Artefakte zu vermeiden. Ergänzend dient die visuelle Analyse aufgezeichneter Episoden der qualitativen Beurteilung von Zielerreichung, Zeit bis zum Ziel und Kollisionsvermeidung sowie der Verifikation der Bewegungsmuster.
 
-Bei der Navigationsumgebung in den ersten beiden Stufen des Curriculum Learnings lag der Fokus der Auswertung insbesondere auf dem durchschnittlichen Return, der mittleren Episodenlänge sowie der Entropie der Policy. Diese Metriken geben Aufschluss über den allgemeinen Lernfortschritt, die Stabilität des Verhaltens und das Maß an Exploration während des Trainings. Ergänzend wurden spezifische Stabilitätsrewards betrachtet, um sicherzustellen, dass der Roboter in der Lage ist, zuverlässig zu stehen und zu laufen. In den höheren Stufen wird größtenteils auf visuell die Policy geprüft. Diese Metriken sind entscheidend, um die Leistungsfähigkeit des Roboters im Umgang mit komplexeren Navigationsaufgaben und dynamischen Hindernissen zu bewerten. Außerdem wurde für jede Stufe die gelernten Policies an einer gewählten Checkpoints visuell ausgewertet, um sicherzustellen, dass das gewünschte Trainingsziel wirklich erreicht wurde.
+\section{Quantitative Ergebnisübersicht}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Stufe} & \textbf{Episodenlimit} & \textbf{beobachteter Bereich} & \textbf{Befund} \\
+\midrule
+Navigation: Stehen & 1000 Schritte & bis 1000 & stabile Standphase \\
+Navigation: Laufen & 1000 Schritte & bis 1000 & stabile Episoden nach Lernphase \\
+Navigation: Ausweichen & 2250 Schritte & ca. 400--800 & kein stabiles Plateau \\
+Navigation: Springen & 1500 Schritte & oszillierend & keine Konvergenz \\
+Interaktion: Stehen & 1000 Schritte & bis 1000 & frühe Stabilität, späterer Einbruch \\
+Interaktion: Geste & 1000 Schritte & ca. 200 im Spätverlauf & kein stabiles Gestenverhalten \\
+\bottomrule
+\end{tabular}
+\caption{Quantitative Zusammenfassung der aus den Trainingskurven ablesbaren Episodenlängen.}
+\label{tab:quantitative_episode_results}
+\end{table}
+
+Erfolgs- und Kollisionsrate auf Episode-Ebene wurden nicht numerisch ausgewertet, da das Herauslesen der erforderlichen Daten aus dem aufgezeichneten Datenbestand im Rahmen dieser Machbarkeitsstudie nicht erfolgreich umgesetzt werden konnte; diese Aspekte werden daher qualitativ anhand der aufgezeichneten Episoden beurteilt. Die vorhandenen Trainingskurven erlauben die Auswertung von Return, Entropie und Episodenlänge.
+
+\autoref{tab:quantitative_summary} fasst die quantitative Auswertung über die fünf Seeds ($N=5$) zusammen. Für jede Stufe sind der Mittelwert und die Standardabweichung der mittleren Episodenlänge $\bar{L}_{\text{ep}}$, des kumulierten Returns $R$ und der Policy-Entropie $H(\pi)$ über die letzten $100$ Trainingsschritte je Seed (Mittelwert des stabilen Endniveaus) und anschließend über die fünf Seeds angegeben. Die hohe Streuung der Interaktions-Stufe \enquote{Stehen} spiegelt die zweigeteilte Konvergenz wider (Seeds 1, 8, 42 kollabieren, Seeds 24 und 77 bleiben stabil); die übrigen Werte sind mit den qualitativen Befunden der folgenden Abschnitte konsistent.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Stufe} & $\bar{L}_{\text{ep}}$ & $R$ & $H(\pi)$ \\
+\midrule
+Navigation: Stehen & $941{,}1\pm51{,}1$ & $6{,}68\pm0{,}30$ & $8{,}09\pm0{,}24$ \\
+Navigation: Laufen & $883{,}5\pm29{,}4$ & $2{,}86\pm0{,}45$ & $19{,}12\pm1{,}08$ \\
+Navigation: Ausweichen & $493{,}7\pm43{,}0$ & $2{,}76\pm0{,}57$ & $22{,}10\pm1{,}71$ \\
+Navigation: Springen & $455{,}9\pm112{,}4$ & $1{,}39\pm0{,}80$ & $32{,}05\pm2{,}29$ \\
+Interaktion: Stehen & $542{,}9\pm358{,}8$ & $5{,}85\pm10{,}8$ & $7{,}42\pm4{,}56$ \\
+Interaktion: Geste & $153{,}1\pm36{,}8$ & $2{,}80\pm0{,}67$ & $33{,}67\pm2{,}13$ \\
+\bottomrule
+\end{tabular}
+\caption{Quantitative Zusammenfassung der Metriken je Stufe als Mittelwert der letzten 100 Trainingsschritte über fünf Seeds ($N=5$, Mittelwert $\pm$ Stichproben-Standardabweichung).}
+\label{tab:quantitative_summary}
+\end{table}
 
 \section{Interaktionsumgebung}
 
 \begin{figure}[htbp]
 	\centering
-	\begin{subfigure}[b]{0.45\textwidth}
-		\includegraphics[width=0.95\textwidth]{figures/stand_pet_env.png}
+	\begin{subfigure}[b]{0.32\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{figures/stand_pet_env.png}
+		\caption{Initiale Standpose}
 		\label{fig:stand_pet_env}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.32\textwidth}
 		\centering
-		\includegraphics[width=0.95\textwidth]{figures/pet_env_1.png}
+		\includegraphics[width=\textwidth]{figures/pet_env_1.png}
+		\caption{Taktiler Kontakt am Kopf}
+		\label{fig:pet_env_1}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.32\textwidth}
 		\centering
-		\includegraphics[width=0.95\textwidth]{figures/pet_env_2.png}
+		\includegraphics[width=\textwidth]{figures/pet_env_2.png}
+		\caption{Reaktionsverhalten}
+		\label{fig:pet_env_2}
 	\end{subfigure}
-	\caption{Interaktionsumgebung für Training von Kopfberührungen und Reaktionsgesten}
+	\caption{Interaktionsumgebung für das Training von Standstabilität und taktilen Reaktionsgesten}
 	\label{fig:pet_env}
 \end{figure}
 
-In der Interaktionsumgebung wurde zunächst isoliert das Stehen trainiert, da diese Fähigkeit eine solide Grundlage für alle nachfolgenden Interaktionsaufgaben bildet. Eine stabile Körperhaltung und ein aufrechterhaltener Bodenkontakt sind essentiell, damit der Roboter taktile Eingaben wie Kopfberührungen korrekt wahrnehmen und verarbeiten kann, ohne während der Interaktion das Gleichgewicht zu verlieren oder zu stürzen. Zudem ermöglicht ein stabiles Stehen der Policy, sich auf die Reaktion gegenüber externen Reizen zu konzentrieren, ohne die Primäraufgabe der Stabilitätsmaintenance zu gefährden. Das Training von Stehen in Isolation reduziert zudem die Komplexität des Lernproblems und erhöht die Stabilität des anschließenden Trainings höherstufiger Interaktionsfähigkeiten.
+In der Interaktionsumgebung wird die Reaktion des vierbeinigen Roboters auf physische Berührungen untersucht. Die Wahrnehmung der Interaktion erfolgt in der Simulation rein mechanisch über die Kollisionsdetektion des Genesis-Frameworks: Ein virtueller kugelförmiger Endeffektor berührt den Kopf-Kollisionskörper des Go2-Modells. Kontaktkräfte werden von der Simulation zwar registriert, das für die Policy verwendete Berührungssignal basiert jedoch ausschließlich auf der positionsbasierten Kontakt-/Abstandserkennung. Das Modell erfordert somit keine optische Bilderkennung einer Hand und stützt sich neben propriozeptiven Gelenkdaten und Orientierungsdaten der IMU auf diese binäre, rein kontaktbasierte Berührungsinformation.
 
-\begin{figure}[htbp] % htbp
+\subsection{Stufe 1: Standstabilität unter Berührungseinfluss}
+Zunächst wurde das Halten einer stabilen Stehpose unter Einwirkung gravitativer und externer Kontaktkräfte trainiert (\autoref{fig:stand_pet_metrics}). Ein robustes Haltungsgleichgewicht bildet das Fundament, damit der Roboter bei mechanischen Krafteinwirkungen am Kopf nicht das Gleichgewicht verliert.
+
+\begin{figure}[htbp]
 	\centering
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_pet_mean_episode_length_across_runs.png}
-		\caption{Divergente Konvergenz: Seed 1 hält Plateau bis Iteration 280, Seeds 8 und 42 brechen früh ab}
+		\caption{Episodenlänge: Früher Maximalwert (1000 Schritte), Divergenz im späten Training}
 		\label{fig:stand_pet_mean_ep_length}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_pet_entropy_across_runs.png}
-		\caption{Entropie-Divergenz: Seed 42 kollabiert auf Null, Seed 8 steigt auf >10}
+		\caption{Entropieverlauf: Verlauf unterscheidet sich zwischen den Seeds}
 		\label{fig:stand_pet_entropy}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_pet_rew_reward_across_runs.png}
-		\caption{Durchgehend negativer Return ($-10$ bis $0$) trotz Trainings}
+		\caption{Kumulierter Return: Stabiles Niveau in der frühen Phase}
 		\label{fig:stand_pet_rewards}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_pet_rew_flexible_height_across_runs.png}
-		\caption{Höhenreward kontinuierlich bei Seeds 1 und 42, teilweise erfolgreiche Höhenkontrolle}
+		\caption{Höhenreward: Steigt bei den meisten Seeds, einzelne Seeds zeigen späte Einbrüche}
 		\label{fig:stand_pet_flexible_height}
 	\end{subfigure}
-	\caption{Instabile Konvergenz beim Stehtraining: Seed 1 zeigt längstes Plateau bis Iteration 280, während Seeds 8 und 42 früh divergieren. Der negative Return zeigt Schwierigkeiten bei der Belohnungsfunktionsgestaltung.}
+	\caption{Trainingsmetriken des Stehtrainings in der Interaktionsumgebung}
 	\label{fig:stand_pet_metrics}
 \end{figure}
 
-Die durchschnittliche Episodenlänge in \autoref{fig:stand_pet_mean_ep_length} steigt bei allen drei Seeds zunächst rasch auf den maximalen Wert von 1000 an, jedoch divergiert das Verhalten im weiteren Verlauf stark zwischen den Seeds. Seed 1 hält die maximale Episodenlänge am längsten aufrecht, bricht jedoch gegen Schritt 280 ein, während Seed 8 bereits ab Schritt 100 einen starken Rückgang zeigt und sich nicht mehr erholt. Seed 42 zeigt einen ähnlichen Einbruch ab Schritt 250. \newline
-Der flexible Höhenreward in \autoref{fig:stand_pet_flexible_height} steigt über den Trainingsverlauf bei Seeds 1 und 42 kontinuierlich an, was darauf hindeutet, dass der Roboter zunehmend lernt, die geforderte Körperhöhe einzuhalten. Der durchschnittliche Return in \autoref{fig:stand_pet_rewards} bleibt über weite Teile des Trainings negativ und zeigt starke Fluktuationen zwischen den Seeds. \newline
-Die Entropie in \autoref{fig:stand_pet_entropy} divergiert stark zwischen den Seeds: Während Seed 42 gegen Schritt 190 auf nahezu null abfällt, steigt Seed 8 kontinuierlich auf über 10 an, was auf eine zunehmend zufällige Policy hindeutet. Eine konsistente Konvergenz über alle Seeds ist nicht zu beobachten.
+Die quantitative Auswertung über die fünf Seeds (1, 8, 42, 24, 77) zeigt eine zweiphasige Dynamik:
+\begin{itemize}
+	\item \textbf{Erfolgreiche Frühphase (bis Iteration 50):} Alle fünf Seeds lernen in den ersten 30 bis 50 Iterationen zuverlässig das Ausbalancieren des Körpers. Die mittlere Episodenlänge (\autoref{fig:stand_pet_mean_ep_length}) erreicht rasch das Maximum von $1000$ Zeitschritten ($20\,\text{s}$), und der Höhenreward (\autoref{fig:stand_pet_flexible_height}) steigt kontinuierlich an. Die qualitative Inspektion bei Iteration 50 belegt bei allen Seeds einen absolut stabilen, aufrechten Stand.
+	\item \textbf{Divergenz und Instabilität im Spätverlauf (ab Iteration 250):} Die quantitative Auswertung des Zeitpunkts des Einbruchs zeigt deutliche Seed-Unterschiede. Alle fünf Seeds erreichen ihr Episodenlängen-Maximum von $\approx 1000$ bereits um Iteration 31. Seed 8 kollabiert als erstes und nachhaltigsten (die mittlere Episodenlänge fällt ab etwa Iteration 150 kontinuierlich auf $\approx 11$ am Ende), gefolgt von Seed 42 (Einbruch ab etwa Iteration 225--250 auf $\approx 41$) und Seed 1 (Einbruch ab etwa Iteration 250--280 auf $\approx 227$). Demgegenüber bleiben die Seeds 24 und 77 trotz temporärer Einbrüche weitgehend stabil und erreichen am Trainingsende mittlere Episodenlängen von $\approx 713$ bzw. $\approx 844$.
+\end{itemize}
+Für das Weitertrainieren der zweiten Stufe wurde konsistent der robuste Checkpoint von Seed 1 bei Iteration 50 als Basis gewählt.
 
-Die visuelle Auswertung der aufgezeichneten Episoden bei Iteration 50 bestätigte über alle drei Seeds hinweg, dass der Roboter zu diesem Zeitpunkt in der Lage ist, stabil zu stehen. Da die Unterschiede zwischen den Seeds zu diesem Zeitpunkt gering waren, wurde exemplarisch mit den Ergebnissen von Seed 1 bei Schritt 50 weitergearbeitet.
-
-In der zweiten Stufe der Interaktionsumgebung bestand die Aufgabe des Roboters darin, während einer Berührung am Kopf eine bestimmte Geste stabil über die gesamte Episodenlänge auszuführen. Die durchschnittliche Episodenlänge in \autoref{fig:pet_mean_length} steigt bei allen drei Seeds zunächst rasch auf den maximalen Wert von 1000 an, fällt jedoch ab Schritt 400 stark ab. Seeds 1 und 8 pendeln ab Schritt 600 um einen Wert von etwa 200, während Seed 42 länger auf höherem Niveau verbleibt, bevor er ebenfalls einbricht.
+\subsection{Stufe 2: Taktile Reaktionsgeste}
+In der zweiten Stufe sollte der Roboter lernen, bei bestehendem Berührungskontakt am Kopf eine kontinuierliche, koordinierte Reaktionsgeste (Heben und Neigen des Vorderkörpers) auszuführen, ohne dabei umzukippen.
 
 \begin{figure}[htbp]
 	\centering
-	\begin{subfigure}[b]{0.5\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/pet_mean_episode_length_across_runs.png}
-		\caption{Kollaps der Episodenlänge: Erreicht Maximum (1000), fällt dann ab Iteration 400 rapide ab}
+		\caption{Kollaps der Episodenlänge ab Iteration 400}
 		\label{fig:pet_mean_length}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/pet_entropy_across_runs.png}
-		\caption{Unbegrenztes Entropie-Wachstum ohne Konvergenz, zeigt Policy-Instabilität}
+		\caption{Kontinuierliches Entropiewachstum ohne Konvergenz}
 		\label{fig:pet_entropy}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/pet_rew_reward_across_runs.png}
-		\caption{Return steigt initial auf $\sim$25, fällt dann kontinuierlich ab mit hohen Fluktuationen}
+		\caption{Return fällt nach frühem Peak drastisch ab}
 		\label{fig:pet_rewards}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/pet_rew_no_sitting_across_runs.png}
-		\caption{Sitz-Penalty relativ stabil, verhindert aber nicht gesamtes Trainingsversagen}
+		\caption{Sitzverbot-Penalty bleibt weitgehend stabil}
 		\label{fig:pet_no_sit}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/pet_rew_gesture_during_touch_across_runs.png}
-		\caption{Gesten-Berührungs-Reward steigt früh, fällt dann kontinuierlich ab}
+		\caption{Gesten-Berührungs-Reward fluktuiert und sinkt}
 		\label{fig:pet_gesture_touch}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/pet_rew_gesture_movement_across_runs.png}
-		\caption{Gesten-Bewegungs-Reward bleibt durchgehend nahe Null, zentrale Ursache des Versagens}
+		\caption{Gesten-Bewegungs-Reward verharrt nahe Null}
 		\label{fig:pet_gesture_move}
 	\end{subfigure}
-	\caption{Trainingsversagen bei Gestenausführung: Episodenlänge fällt ab Iteration 400 ab und stabilisiert sich auf ~200. Gestenreward bleibt nahe Null, Entropie steigt kontinuierlich – Anzeichen für fehlende Policy-Konvergenz.}
+	\caption{Metriken der Gestenausführung in der Interaktionsumgebung}
 	\label{fig:pet_metrics}
 \end{figure}
 
-Der Reward für die Geste während der Berührung in \autoref{fig:pet_gesture_touch} erreicht früh ein hohes Niveau, fällt jedoch im weiteren Trainingsverlauf kontinuierlich ab und fluktuiert stark. Der Reward für die Gestenbewegung in \autoref{fig:pet_gesture_move} bleibt über den gesamten Trainingsverlauf auf einem sehr niedrigen Niveau nahe null. Der durchschnittliche Return in \autoref{fig:pet_rewards} zeigt nach einem frühen Anstieg auf etwa 25 einen starken Rückgang und fluktuiert im weiteren Verlauf erheblich.
+Die Trainingsmetriken in \autoref{fig:pet_metrics} zeigen für die Gestenausführung folgende Befunde:
 
-Die Entropie in \autoref{fig:pet_entropy} steigt über alle Seeds hinweg kontinuierlich und ohne Konvergenz an. Die visuelle Auswertung der aufgezeichneten Episoden zeigte, dass kein Seed eine stabile Geste über die gesamte Episode aufrechterhalten konnte.
+\begin{itemize}
+	\item Die \textbf{Episodenlänge} (\autoref{fig:pet_mean_length}) verharrt in den ersten Iterationen auf dem Maximalwert von $1000$ Schritten und stürzt danach bei allen fünf Seeds drastisch auf Werte zwischen etwa $100$ und $210$ ab (Mittelwert $\approx 164 \pm 40$).
+	\item Der Belohnungsterm für aktive Gelenkwinkelgeschwindigkeiten ($r_{\text{gesture\_movement}}$ in \autoref{fig:pet_gesture_move}) verbleibt über das gesamte Training bei Werten nahe null.
+	\item Die \textbf{Policy-Entropie} (\autoref{fig:pet_entropy}) steigt kontinuierlich auf Werte über 15 an.
+	\item Parallel erkennt das System auf Basis des positionsbasierten Berührungssignals zuverlässig Kontakt- und Kontaktende, und die Policy kehrt nach Wegfall des Kontakts in die nominale Stehhaltung zurück (\autoref{fig:pet_env}).
+\end{itemize}
 
 \section{Navigationsumgebung}
 
 \begin{figure}[htbp]
 	\centering
 	\includegraphics[width=0.5\textwidth]{figures/stand_env.png}
-	\caption{Navigationsumgebung für Training von Stehen mit Seed 42}
+	\caption{Navigationsumgebung für Stehtraining}
 	\label{fig:stand_env}
 \end{figure}
 \subsection{Stehen: Erste Stufe im Curriculum Learning}
 
-In der ersten Stufe des Curriculum Learnings bestand die Aufgabe des Roboters darin, eine stabile stehende Position einzunehmen und über die gesamte Episodenlänge aufrechtzuerhalten. Die Auswertung der Trainingsläufe zeigt, dass der der Reward für die Einhaltung der Höhe in \autoref{fig:stand_height} und der durchschnittliche Return in \autoref{fig:stand_rewards} bereits nach etwa 50 Iterationen einen Wert über 6 erreicht, was auf ein schnelles Erlernen der Standstabilität hindeutet. Auch die durchschnittliche Episodenlänge in \autoref{fig:stand_mean_ep_length} steigt in den ersten 30 Iterationen rasch an und nähert sich dem maximal möglichen Wert von 1000 an, da der Roboter zunehmend seltener durch Instabilität oder Abbruchbedingungen vorzeitig scheitert.
+In der ersten Stufe des Curriculum Learnings bestand die Aufgabe des Roboters darin, eine stabile stehende Position einzunehmen und über die gesamte Episodendauer von $1000$ Zeitschritten ($20\,\text{s}$) aufrechtzuerhalten. Die Auswertung der Trainingsläufe zeigt, dass der Höhenreward in \autoref{fig:stand_height} und der durchschnittliche Return in \autoref{fig:stand_rewards} bereits nach etwa 50 Iterationen einen stabilen Wert über 6 erreichen, was ein rasches und robustes Erlernen der Standstabilität belegt. Parallel dazu steigt die mittlere Episodenlänge (\autoref{fig:stand_mean_ep_length}) in den ersten 30 Iterationen sprunghaft an und nähert sich dem Maximum von $1000$ Schritten, da die Häufigkeit vorzeitiger Stürze gegen null konvergiert.
 
-\begin{figure}[htbp] % htbp
+\begin{figure}[htbp]
 	\centering
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_mean_episode_length_across_runs.png}
-		\caption{Schnelle Konvergenz: Alle Seeds erreichen Maximum (1000) in ersten 30 Iterationen}
+		\caption{Schnelle Konvergenz: Alle Seeds erreichen Maximum (1000) in ersten 50 Iterationen}
 		\label{fig:stand_mean_ep_length}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_entropy_across_runs.png}
-		\caption{Sinkende Entropie über alle Seeds, Zeichen erfolgreicher Konvergenz}
+		\caption{Sinkende Entropie über alle Seeds}
 		\label{fig:stand_entropy}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_rew_reward_across_runs.png}
-		\caption{Stabiler Return-Anstieg: Erreicht >6 nach ~50 Iterationen, hochgradig reproduzierbar}
+		\caption{Stabiler Return-Anstieg: Erreicht >6 nach 50 Iterationen}
 		\label{fig:stand_rewards}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/stand_rew_height_across_runs.png}
-		\caption{Höhenreward kontinuierlich über alle Seeds, erfolgreiche Höhenkontrolle erlernt}
+		\caption{Höhenreward kontinuierlich über alle Seeds}
 		\label{fig:stand_height}
 	\end{subfigure}
-	\caption{Robustes Erlernen von Standstabilität: Alle Seeds konvergieren innerhalb 30 Iterationen, Episodenlänge erreicht Maximum von 1000. Entropie sinkt kontinuierlich – klare Anzeichen erfolgreichen Trainings.}
+	\caption{Metriken des Stehtrainings in Navigationsumgebung mit erfolgreicher Konvergenz über alle Seeds}
 	\label{fig:stand_metrics}
 \end{figure}
-Die Entropie der Policy, welche in \autoref{fig:stand_entropy} zu sehen ist, nimmt im Verlauf des Trainings kontinuierlich ab. Zusätzlich bestätigen die visuellen Auswertungen der Episoden, dass der Roboter nach Abschluss der ersten Stufe in der Lage ist, sicher und stabil zu stehen. Unterschiede zwischen den einzelnen Seeds waren nur geringfügig ausgeprägt, sodass exemplarisch auf den Ergebnissen des Seeds 42 bei Schritt 50 weitergearbeitet wurde.
+
+Die Policy-Entropie (\autoref{fig:stand_entropy}) nimmt im Verlauf des Trainings kontinuierlich ab. Die visuelle Auswertung der Checkpoints bei Iteration 50 bestätigt für alle fünf Seeds ein fehlerfreies Stehen. Unterschiede zwischen den Seeds waren vernachlässigbar gering, sodass für die Folgestufe der Checkpoint von Seed 42 bei Schritt 50 als Ausgangsbasis gewählt wurde.
 
 \begin{figure}[htbp]
 	\centering
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/walk_env_1.png}
+		\caption{Startzustand aus Standpose}
+		\label{fig:walk_env_1}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/walk_env_2.png}
+		\caption{Beschleunigung und Antritt}
+		\label{fig:walk_env_2}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/walk_env_3.png}
+		\caption{Etablierter diagonaler Trabgang}
+		\label{fig:walk_env_3}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/walk_env_4.png}
+		\caption{Stabile kontinuierliche Fortbewegung}
+		\label{fig:walk_env_4}
 	\end{subfigure}
-	\caption{Navigationsumgebung für Training von Laufen}
+	\caption{Sequenz des gerichteten Vorwärtslaufens in der Navigationsumgebung}
 	\label{fig:walk_env}
 \end{figure}
 
@@ -181,38 +248,39 @@ Die Entropie der Policy, welche in \autoref{fig:stand_entropy} zu sehen ist, nim
 
 \begin{figure}[htbp]
 	\centering
-	\begin{subfigure}[b]{0.5\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/walk_mean_episode_length_across_runs.png}
-		\caption{Parallele Konvergenz: Alle Seeds zeigen ähnlichen explosiven Anstieg ab Iteration 300}
+		\caption{Sprunghafter Anstieg der Episodenlänge ab Iteration 300 bei allen Seeds}
 		\label{fig:walk_mean_length}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/walk_entropy_across_runs.png}
-		\caption{Stabilisierende Entropie: Konvergiert auf $\sim$2.6, zeigt gelernte deterministische Policy}
+		\caption{Entropie verharrt ab Iteration 300 auf hohem Niveau ($\sim 19$) ohne weiteres Absinken}
 		\label{fig:walk_entropy}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/walk_rew_reward_across_runs.png}
-		\caption{Robuster Return-Anstieg ab Iteration 300 mit stabiler Konvergenz über alle Seeds}
+		\caption{Robuster Return-Anstieg ab Iteration 300 mit stabiler Konvergenz}
 		\label{fig:walk_rewards}
 	\end{subfigure}
-	\begin{subfigure}[b]{0.45\textwidth}
+	\begin{subfigure}[b]{0.48\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/walk_rew_tracking_lin_vel_across_runs.png}
-		\caption{Geschwindkeitsreward-Anstieg ab Iteration 400, Kern des Lernens der Gehbewegung}
+		\caption{Geschwindigkeits-Tracking-Reward steigt ab Iteration 300--400 kontinuierlich an}
 		\label{fig:walk_tracking_lin_vel}
 	\end{subfigure}
-	\caption{Erfolgreiche Laufen-Konvergenz mit stabiler Generalisierung: Return und Episodenlänge zeigen explosiven Anstieg ab Iteration 300, alle Seeds konvergieren zu ähnlichen Wertbereichen. Entropie stabilisiert bei ca. 2.6, kein Overfitting erkennbar.}
+	\caption{Trainingsmetriken der Laufbewegung mit robuster Konvergenz über alle Seeds}
 	\label{fig:walk_metrics}
 \end{figure}
 
-Auf Grundlage der ersten Stufe besteht die Aufgabe des Roboters in der zweiten Stufe darin, eine vorgegebene Gehgeschwindigkeit stabil zu verfolgen und dabei Laufen zu lernen. Der durchschnittliche Return für das Verfolgen der linearen Geschwindigkeit in \autoref{fig:walk_tracking_lin_vel} fängt an, bei 400 Iterationen deutlich zu steigen, bis es sich bei 600 Iterationen stabilisiert. Der gesamte durchschnittliche Return spiegelt dieses Verhalten ebenfalls wieder. \newline
-Die durchschnittliche Episodenlänge in \autoref{fig:walk_mean_length} nimmt im Verlauf des Trainings ähnlich wie die Returns bei Iteration 300 über alle Seeds hinweg zu und stabilisert sich ebenfalls bei rund 600 Iterationen. Zusammen mit der Entropie, welche sich bei 600 Iterationen auf ungefähr 2,6 stabilisiert, deutet dies darauf hin, dass die Roboter die Gehbewegung erlernt, und die Policy eine geringe Variabilität aufweist. Der steile, explosionsartige Anstieg in der durchschnittlichen Episodenlänge, des Returns und der Gehgeschwindigkeit bei ca. 50 Iterationen lässt sich durch das Fortsetzen des Trainings auf Grundlage der Stehpolicy begründen.
+Auf Basis der Stand-Policy bestand die Aufgabe der zweiten Stufe darin, vorgegebenen Linear- und Winkelgeschwindigkeitskommandos ($v_x, v_y, \omega_z$) präzise zu folgen. Der Tracking-Reward für die Lineargeschwindigkeit (\autoref{fig:walk_tracking_lin_vel}) steigt ab Iteration 300 steil an und stabilisiert sich ab ca. Iteration 600 auf hohem Niveau. Der kumulierte Return (\autoref{fig:walk_rewards}) und die mittlere Episodenlänge (\autoref{fig:walk_mean_length}) zeigen einen identischen Verlauf.
 
-Ein Vergleich der Trainingsergebnisse zwischen den Seeds zeigt, dass die Verläufe der Metriken in allen Fällen einen ähnlichen Verlauf aufweisen und ähnliche Endleistungen erzielen, welches auch durch visuelle Auswertungen bestätigt wird. In den folgenden Stufen wurden mit den Trainingsergebnissen aus Seed 1 bei Schritt 1049 weitergearbeitet.
+Der steile Anstieg der Episodenlänge und des Returns um Iteration 300 führt dazu, dass die Episoden bis zur maximalen Schrittzahl von 1000 Schritten durchlaufen, was den akkumulierten Gesamtertrag sprunghaft vervielfacht. Die Policy-Entropie verharrt dabei mit $\approx 19$ auf einem hohen Niveau.
+
+Die Auswertung über alle fünf Seeds (1, 8, 42, 24, 77) zeigt eine konsistente Lerncharakteristik und eine vergleichbare Endleistung, was durch visuelle Inspektion bei Iteration 1049 verifiziert wurde. Für die Folgestufen wurde konsistent mit dem Checkpoint von Seed 1 bei Iteration 1049 weitergearbeitet.
 
 \begin{figure}[htbp]
 	\centering
@@ -242,19 +310,19 @@ Ein Vergleich der Trainingsergebnisse zwischen den Seeds zeigt, dass die Verläu
 	\begin{subfigure}[b]{0.5\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/avoid_mean_episode_length_across_runs.png}
-		\caption{Schnelle Konvergenz: Episodenlänge steigt ab Iteration 1050 und stabilisiert sich}
+		\caption{Episodenlänge steigt ab Iteration 1050 und fluktuiert zwischen 800 und 400}
 		\label{fig:avoid_mean_length}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/avoid_entropy_across_runs.png}
-		\caption{Initiale Explorationsphase ($\sim$500 Iterationen), dann Stabilisierung}
+		\caption{Policy-Entropie verharrt auf hohem Niveau (keine deterministische Verfestigung)}
 		\label{fig:avoid_entropy}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/avoid_rew_reward_across_runs.png}
-		\caption{Return konvergiert ab Iteration 1100 stabil über alle Seeds}
+		\caption{Return fluktuiert ab Iteration 1100 zwischen 2 und 4}
 		\label{fig:avoid_rewards}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
@@ -263,34 +331,48 @@ Ein Vergleich der Trainingsergebnisse zwischen den Seeds zeigt, dass die Verläu
 		\caption{Zielannäherungs-Reward steigt konsistent ab Iteration 1050}
 		\label{fig:avoid_tracking_lin_vel}
 	\end{subfigure}
-	\caption{Generalisierte Hindernisvermeidung ohne explizites Training: Return und Episodenlänge konvergieren ab Iteration 1100. Entropie zeigt initiale Explorationsphase (~500 Iterationen), deutet auf erfolgreiche Adaption der Lauf-Policy hin.}
+	\caption{Metriken für Ausweichen von Hindernis ohne eindeutige Konvergenz der Gesamtleistung}
 	\label{fig:avoid_metrics}
 \end{figure}
 
-In der dritten Stufe wurde das Ausweichen von Hindernissen auf Grundlage der zweiten Stufe trainiert, bei dem man ein bestimmtes Ziel annähern und erreichen muss. Die Schrittachse fängt hier erst beim Schritt an, ab dem trainiert. \newline
-Die Metriken in \autoref{fig:avoid_metrics} zeigen, dass Return und Episodenlänge bereits ab Iteration 1100 konvergieren. Die Entropie hingegen steigt in den ersten ca. 500 Iterationen an, was auf eine aktive Explorationsphase hindeutet, in der die Policy versucht, eine neue Strategie für die komplexere Aufgabe zu entwickeln.
+In der dritten Stufe wurde das Navigationsverhalten mit einem statischen Hindernis auf Basis der vortrainierten Lauf-Policy (Checkpoint Iteration 1049) evaluiert und weitertrainiert. Die Schrittachse in \autoref{fig:avoid_metrics} bildet den Verlauf ab Wiederaufnahme des Trainings ab.
 
-Um zu überprüfen, ob die Policy aus Stufe 2 generalisierte Fähigkeiten erworben hat, wurde diese in der Umgebung der dritten Stufe getestet und anhand aufgezeichneter Episoden visuell inspiziert. Dabei zeigte sich, dass die Policy in der Lage ist, Hindernissen auszuweichen und das Ziel zuverlässig zu erreichen, ohne explizit auf diese Aufgabe trainiert worden zu sein. Die Ergebnisse deuten vielmehr darauf hin, dass die Policy aus Stufe 2 eine generalisierte Repräsentation der Laufbewegung erworben hat, welche auf die dritte Stufe übertragbar ist.
+Die aggregierten Trainingskurven in \autoref{fig:avoid_metrics} zeigen, dass Return (\autoref{fig:avoid_rewards}) und Episodenlänge (\autoref{fig:avoid_mean_length}) ab Iteration 1100 in einem Bereich fluktuieren (Episodenlänge zwischen ca. 400 und 800, Return zwischen etwa 2 und 4), ohne ein stabiles Konvergenzplateau zu erreichen. Der Zielannäherungs-Reward (\autoref{fig:avoid_tracking_lin_vel}) steigt kontinuierlich an, während die Policy-Entropie (\autoref{fig:avoid_entropy}) in den ersten 500 Iterationen leicht ansteigt und auf hohem Niveau verharrt.
+
+Zur Überprüfung der Übertragbarkeit wurde die vortrainierte Policy aus Stufe 2 unmittelbar (vor weiterem Feintuning bei Iteration 1049) in der Hindernisumgebung getestet. Die qualitative und quantitative Analyse aufgezeichneter Testepisoden zeigt ein differenziertes Bild:
+\begin{itemize}
+	\item Der Roboter steuerte das Ziel in freiem Raum zielstrebig an.
+	\item Bei frontaler Annäherung an das Hindernis führte das System keine vorausschauende, visuell geplante Ausweichtrajektorie aus.
+	\item Kam es zum physischen Kontakt zwischen den Beinen bzw. dem Rumpf des Roboters und dem Hinderniskörper, erwies sich die gelernte Haltungsregelung als hochgradig robust: Die Laufpolicy war ausreichend stabil, sodass der Roboter trotz des Kontakts mit dem Hindernis seine Körperhaltung beibehalten konnte. Durch die fortwährende Einwirkung der Vorwärts- und Stabilitätsrewards glitt der Roboter entlang der Hinderniskante seitlich ab und setzte anschließend seinen Weg zum Ziel fort.
+\end{itemize}
 
 \begin{figure}[htbp]
 	\centering
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/jump_env_1.png}
+		\caption{Annäherung an das Hindernis}
+		\label{fig:jump_env_1}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/jump_env_2.png}
+		\caption{Absprungansatz vor der Kante}
+		\label{fig:jump_env_2}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/jump_env_3.png}
+		\caption{Physischer Kontakt / Kletterversuch}
+		\label{fig:jump_env_3}
 	\end{subfigure}
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=0.95\textwidth]{figures/jump_env_4.png}
+		\caption{Instabile Landung nach Kollision}
+		\label{fig:jump_env_4}
 	\end{subfigure}
-	\caption{Navigationsumgebung für Training von Springen}
+	\caption{Sequenz der Hinderniskonfrontation in der Sprungstufe}
 	\label{fig:jump_env}
 \end{figure}
 
@@ -330,19 +412,20 @@ Um zu überprüfen, ob die Policy aus Stufe 2 generalisierte Fähigkeiten erworb
 	\begin{subfigure}[b]{0.45\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{figures/jump_rew_jump_flight_across_runs.png}
-		\caption{Flugphasen-Reward minimal (1/200-1/400), fehlende aktive Kontrolle}
+		\caption{Flugphasen-Reward minimal ($\frac{1}{200}-\frac{1}{400}$), fehlende aktive Kontrolle}
 		\label{fig:jump_flight}
 	\end{subfigure}
-	\caption{Trainingsversagen beim Springen: Return und Episodenlänge oszillieren ohne Konvergenz über alle Seeds. Entropie konvergiert nicht und steigt bis 28-34 an. Seed 42 erzielt höhere Rewards, aber auch keine stabilen Ergebnisse. Komplexe Sprungdynamik nicht erfolgreich erlernt.}
+	\caption{Sprungmetriken ohne erkennbare Konvergenz}
 	\label{fig:jump_metrics}
 \end{figure}
 
-In der vierten Stufe sollte der Roboter auf Grundlage der zweiten Stufe lernen, Hindernisse durch Sprünge zu überwinden. Die Aufgabe erfordert eine präzise, hochkoordinierte Bewegungssequenz: Der Roboter muss explosive Drehmomente für einen Sprung erzeugen, die temporäre Aufgabe der Bodenkontaktstabilität handhaben und eine sichere Landung durchführen.
+In der vierten Stufe sollte der Roboter auf Grundlage der erlernten Laufbewegung lernen, Hindernisse dynamisch durch Sprünge zu überwinden. Diese Aufgabe stellt eine fundamentale Anforderungserweiterung dar: Sie erfordert hochkoordinierte, explosive Drehmomentstöße aller vier Gliedmaßen, die temporäre bewusste Aufgabe des stabilen Bodenkontakts sowie eine kontrollierte Landung zur Wiederherstellung der Standstabilität.
 
-Die Lernkurven in \autoref{fig:jump_metrics} zeigen, dass Return (\autoref{fig:jump_rewards}) und Episodenlänge (\autoref{fig:jump_mean_length}) keine konsistente Konvergenz aufweisen, sondern zwischen zwei Wertebereichen oszillieren. Die Entropie steigt ebenfalls weiter an auf ein höheres Niveau, jeweils auf ca. 28 bei Seed 42, und 34 bei Seeds 1 und 8.
+Die Trainingskurven in \autoref{fig:jump_metrics} verdeutlichen, dass weder der Return (\autoref{fig:jump_rewards}) noch die Episodenlänge (\autoref{fig:jump_mean_length}) ein stabiles Konvergenzplateau erreichen, sondern im weiteren Verlauf oszillieren. Gleichzeitig steigt die Policy-Entropie (\autoref{fig:jump_entropy}) bei allen fünf Seeds kontinuierlich an (auf Werte um 28 bei Seed 42 und ca. 33--34 bei den übrigen Seeds).
 
-Ein Vergleich zwischen den Seeds (1, 8, 42) offenbart ähnliche, qualitative Verläufe über alle Seeds hinweg, doch erfolgte in keinem Seed ein stabiles Erreichen des Ziels ohne Kollisionen. Quantitativ unterscheiden sich die Werte, so erzielte Seed 42 über die Iterationen hinweg mehr Rewards als die anderen zwei Seeds. Zusätzlich war im Schnitt die Episodenlänge höher bei Seeds 42 als bei 8 und 1.
-
-Die Rewards für das Erlernen der Sprungfähigkeit, zu sehen in \autoref{fig:jump_approach}, \autoref{fig:jump_takeoff} and \autoref{fig:jump_flight}, zeigen einen ähnlichen Verlauf, der aber im Vergleich zur gesamten durchschnittlichen Return nicht stark ins Gewicht fallen. So steigt der Reward für die Annäherung in \autoref{fig:jump_approach}an das Hindernis bereits ab Fortsetzen des Trainings bei Iteration 1050, und dessen Verlauf dann fluktuiert. Ähnlich sieht es für den Reward für den Sprungansatz in \autoref{fig:jump_takeoff} aus, dessen Gewichtung im Gegensatz zum Reward für die Annäherung das 10 bis 50-fache beträgt. Der Reward für die Zeit während Flugbahn fällt im Vergleich zu den anderen beiden Sprungrewards sehr gering aus, und beträgt im Gegensatz zu den gesamten durchschnittlichen Returns das 200- bis 400-fache weniger.
-
-Bei der visuellen Auswertung aufgezeichneter Episoden zeigten sich folgende Verhaltensmuster: Der Roboter führte vereinzelt sprungähnliche Bewegungen aus, das Laufen wirkte jedoch unnatürlich, was sich mit ruckartigen, unkontrollierten Bewegungsabläufen äußerte. Statt durch Sprünge über das Hindernis zu gelangen, versuchte der Roboter, dieses zu erklimmen oder frontal dagegen zu laufen. In den meisten Episoden endet das Trainieren mit Kollisionen gegen das Hindernis.
+Die Verläufe der Sprung-Teilbelohnungen (\autoref{fig:jump_approach}, \autoref{fig:jump_takeoff} und \autoref{fig:jump_flight}) zeigen folgende Befunde:
+\begin{itemize}
+	\item Der Annäherungs-Reward ($r_{\text{jump\_approach}}$ in \autoref{fig:jump_approach}) steigt zwar ab Wiederaufnahme des Trainings bei Iteration 1050 an, fluktuiert jedoch stark.
+	\item Der Absprung-Reward ($r_{\text{jump\_takeoff}}$ in \autoref{fig:jump_takeoff}) weist eine um den Faktor 10 bis 50 höhere Skalierung auf und erzeugt temporäre Drehmomentspitzen.
+	\item Der Flugphasen-Reward ($r_{\text{jump\_flight}}$ in \autoref{fig:jump_flight}) macht jedoch mit einem Anteil von lediglich $\frac{1}{200}$ bis $\frac{1}{400}$ des kumulierten Gesamtertrags einen vernachlässigbar kleinen Bruchteil aus.
+\end{itemize}
